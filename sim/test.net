@@ -1,0 +1,5 @@
+INPUT a, b, c
+OUTPUT r
+VAR a, b, c, r IN
+r = MUX a b c
+

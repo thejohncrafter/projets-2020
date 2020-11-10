@@ -1,0 +1,11 @@
+
+[package]
+name = "parser"
+version = "0.1.0"
+authors = ["thejohncrafter"]
+edition = "2018"
+
+[dependencies]
+automata = {path = "../automata"}
+parsergen = {path = "../parsergen"}
+

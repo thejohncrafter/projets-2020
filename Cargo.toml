@@ -1,0 +1,4 @@
+
+[workspace]
+members = ["automata", "parsergen", "sim", "parser"]
+

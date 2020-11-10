@@ -1,0 +1,11 @@
+
+[package]
+name = "automata"
+version = "0.1.0"
+authors = ["thejohncrafter"]
+edition = "2018"
+
+[lib]
+
+[dependencies]
+
