@@ -1,0 +1,5 @@
+INPUT a
+OUTPUT b
+VAR a, b, c IN
+c = XOR a b
+b = REG a

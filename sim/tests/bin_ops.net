@@ -1,0 +1,25 @@
+INPUT a
+OUTPUT c
+VAR
+	a: 2, c: 5,
+	a0, a1,
+	b0, b1, b2, b3, b4,
+	c0: 2, c1: 3, c2: 4, c3: 5
+IN
+
+a0 = SELECT 0 a
+a1 = SELECT 1 a
+
+b0 = OR a0 a1
+b1 = XOR a0 a1
+b2 = AND a0 a1
+b3 = NAND a0 a1
+b4 = a0
+
+c0 = CONCAT b0 b1
+c1 = CONCAT c0 b2
+c2 = CONCAT c1 b3
+c3 = CONCAT c2 b4
+
+c = c3
+
