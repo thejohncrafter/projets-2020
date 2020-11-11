@@ -1,6 +1,8 @@
 
 # Projets d'info 2020
 
+Aussi sur [Github](https://github.com/thejohncrafter/projets-2020) !
+
 Une collection de projets d'info pour 2020.
 
 Certains composants sont réutilisés entre les projets (pour l'instant `automata` et `parsergen`).

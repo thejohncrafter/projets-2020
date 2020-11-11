@@ -3,6 +3,8 @@
 
 Un simulateur netlist écrit en [Rust](https://www.rust-lang.org/).
 
+Aussi sur [Github](https://github.com/thejohncrafter/projets-2020/tree/master/sim) !
+
 ### Caractéristiques
 
 Ce simulateur prend une netlist en entrée, la transforme en graphe
