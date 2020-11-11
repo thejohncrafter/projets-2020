@@ -70,6 +70,11 @@ pub fn build_graph(netlist: Netlist) -> Result<OpsGraph, String> {
         Ok(())
     })?;
 
+    netlist.outputs.iter().try_for_each(|name| -> Result<(), String> {
+        find_var(name)?;
+        Ok(())
+    })?;
+
     let inputs = netlist.inputs.into_iter().map(|name| {
             let (_, address, len) = find_var(&name).unwrap();
             (len, address, name)
