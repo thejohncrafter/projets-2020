@@ -5,6 +5,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
+use clap::{Arg, App, SubCommand};
+
 use automata::lexer::*;
 use automata::parser::*;
 use automata::line_counter::*;
@@ -34,6 +36,9 @@ enum Keyword {
 enum Punct {
     LPar,
     RPar,
+    Comma,
+    Colon,
+    DoubleColon,
     Semicolon,
 
     Equ,
@@ -51,6 +56,8 @@ enum Punct {
     Minus,
     Times,
     Div,
+
+    Not,
 
     Pow,
     
@@ -191,6 +198,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
 
         ('(') => {punct!(LPar)},
         (')') => {punct!(RPar)},
+        (',') => {punct!(Comma)},
+        (':') => {punct!(Colon)},
+        (':' & ':') => {punct!(DoubleColon)},
         (';') => {punct!(Semicolon)},
         
         ('=') => {punct!(Equ)},
@@ -209,6 +219,8 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
         ('*') => {punct!(Times)},
         ('%') => {punct!(Div)},
 
+        ('!') => {punct!(Not)},
+       
         ('^') => {punct!(Pow)},
 
         ('.') => {punct!(Dot)},
@@ -217,6 +229,7 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
     struct Adapter<'a, I> {
         inner: &'a mut I,
         can_add_semi: bool,
+        saw_else: bool,
     }
 
     /*
@@ -224,14 +237,14 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
      */
     impl<'a, I> Adapter<'a, I> {
         fn new(inner: &'a mut I) -> Self {
-            Adapter {inner, can_add_semi: false}
+            Adapter {inner, can_add_semi: false, saw_else: false}
         }
     }
 
-    impl<'a, I> Iterator for Adapter<'a, I>
-        where I: Iterator<Item = Result<(Span<'a>, TokenOrEof<PreToken>), ReadError<'a>>>
+    impl<'a, 'b, I> Iterator for Adapter<'a, I>
+        where I: Iterator<Item = Result<(Span<'b>, TokenOrEof<PreToken>), ReadError<'b>>>
     {
-        type Item = Result<(Span<'a>, Option<Token>), ReadError<'a>>;
+        type Item = Result<(Span<'b>, Option<Token>), ReadError<'b>>;
 
         fn next(&mut self) -> Option<Self::Item> {
             loop {
@@ -266,6 +279,19 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                                     _ => false
                                 };
 
+                                if let Token::Keyword(Keyword::If) = token {
+                                    return Some(Err((
+                                        span,
+                                        "Illegal \"if\" after \"else\" (please use \"elif\").".to_string()
+                                    ).into()))
+                                }
+
+                                if let Token::Keyword(Keyword::Else) = token {
+                                    self.saw_else = true;
+                                } else {
+                                    self.saw_else = false;
+                                }
+
                                 return Some(Ok((span, Some(token))))
                             }
                         }
@@ -277,17 +303,6 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
     }
 
     let tokens = Adapter::new(&mut dfa);
-    
-    /*tokens.map(|t| {
-        t.unwrap().1
-    }).take_while(|t| {
-        match t {
-            Some(_) => true,
-            _ => false
-        }
-    }).map(|t| t.unwrap()).for_each(|token| {
-        println!("{:?}", token)
-    });*/
 
     let ast = parse! {
         terms: [
@@ -314,6 +329,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
 
             LPAR: (),
             RPAR: (),
+            COMMA: (),
+            COLON: (),
+            DOUBLECOLON: (),
             SEMICOLON: (),
 
             EQU: (),
@@ -332,16 +350,79 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             TIMES: (),
             DIV: (),
 
+            NOT: (),
+
             POW: (),
 
             DOT: (),
         ]
         nterms: [
+            file: Vec<Decl>,
+
+            located_ident: LocatedIdent,
+
+            decl: Decl,
+           
+            param: Param,
+            params: Vec<Param>,
+
+            fields: Vec<Param>,
+            struct_head: bool,
+            structure: Structure,
+
+            function_head: (String, Vec<Param>),
+            function_signature: (String, Vec<Param>, Option<LocatedIdent>),
+            function: Function,
+
+            range: Range,
+
+            comparison_op: BinOp,
+            sum_op: BinOp,
+            product_op: BinOp,
+
+            // "clean" expressions are expressions that do not
+            // start with a "-"
+            // (defined in order to unambiguously define rules
+            // where "exp exp" appears).
+            exp: Exp,
+            clean_exp: Exp,
+            exp_return: Exp,
+            exp_clean_return: Exp,
+            exp_assign: Exp,
+            exp_clean_assign: Exp,
             exp_disjunctions: Exp,
+            exp_clean_disjunctions: Exp,
             exp_conjunctions: Exp,
+            exp_clean_conjunctions: Exp,
             exp_comparisons: Exp,
+            exp_clean_comparisons: Exp,
             exp_sums: Exp,
+            exp_clean_sums: Exp,
             exp_products: Exp,
+            exp_clean_products: Exp,
+            exp_unary: Exp,
+            exp_clean_unary: Exp,
+            exp_powers: Exp,
+            exp_atom: Exp,
+
+            lvalue: LValue,
+
+            else_block: Else,
+
+            call_args: Vec<Exp>,
+
+            block_0: Block,
+            // A block that does not start with "-" (see comment
+            // on clean expressions above.
+            clean_block_0: Block,
+            // We can only define block_1, and not block
+            // as in the specification, because
+            // with this generator it is impossible
+            // to parse tokens that expand to an empty
+            // sequence.
+            block_1: Block,
+            block_2: Block, // A block that starts with a semicolon and
+                            // that can be just a sequence of semicolons.
         ]
         
         tokens: {
@@ -383,6 +464,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                             match p {
                                 LPar => $LPAR(()),
                                 RPar => $RPAR(()),
+                                Comma => $COMMA(()),
+                                Colon => $COLON(()),
+                                DoubleColon => $DOUBLECOLON(()),
                                 Semicolon => $SEMICOLON(()),
 
                                 Equ => $EQU(()),
@@ -401,6 +485,8 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                                 Times => $TIMES(()),
                                 Div => $DIV(()),
 
+                                Not => $NOT(()),
+
                                 Pow => $POW(()),
                                 
                                 Dot => $DOT(()),
@@ -416,29 +502,303 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
         }
 
         rules: {
+            // We can't accept an empty file from this grammar.
+            // Empty files will be handled manually.
+            // TODO: handle empty files
+            (file -> d:decl) => {Ok(vec!($d))},
+            (file -> f:file d:decl) => {
+                let mut v = $f;
+                v.push($d);
+                Ok(v)
+            },
+
+            (decl -> s:structure SEMICOLON) => {Ok(Decl::new(DeclVal::Structure($s)))},
+            (decl -> f:function SEMICOLON) => {Ok(Decl::new(DeclVal::Function($f)))},
+            (decl -> e:exp SEMICOLON) => {Ok(Decl::new(DeclVal::Exp($e)))},
+
+            (located_ident -> id:ident) => {Ok(LocatedIdent::new($id))},
+
+            (fields -> COLON) => {Ok(vec!())},
+            (fields -> p:param COLON f:fields) => {
+                let mut v = $f;
+                v.insert(0, $p);
+                Ok(v)
+            },
+
+            (struct_head -> STRUCT) => {Ok(false)},
+            (struct_head -> MUTABLE STRUCT) => {Ok(true)},
+            (structure -> mutable:struct_head name:located_ident END) => {
+                Ok(Structure::new($mutable, $name, vec!()))
+            },
+            (structure -> mutable:struct_head name:located_ident f:fields END) => {
+                Ok(Structure::new($mutable, $name, $f))
+            },
+
+            (param -> name:located_ident) => {Ok(Param::new($name, None))},
+            (param -> name:located_ident DOUBLECOLON ty:located_ident) => {
+                Ok(Param::new($name, Some($ty)))
+            },
+
+            (params -> p:param) => {Ok(vec!($p))},
+            (params -> p:param COMMA) => {Ok(vec!($p))},
+            (params -> p:param COMMA l:params) => {
+                let mut v = $l;
+                v.insert(0, $p);
+                Ok(v)
+            },
+
+            (function_head -> FUNCTION name:identlpar RPAR) => {Ok(($name, vec!()))},
+            (function_head -> FUNCTION name:identlpar p:params RPAR) => {Ok(($name, $p))},
+            (function_signature -> h:function_head) => {Ok(($h.0, $h.1, None))},
+            (function_signature -> h:function_head DOUBLECOLON ty:located_ident) => {
+                Ok(($h.0, $h.1, Some($ty)))
+            },
+            (function -> s:function_signature END) => {
+                Ok(Function::new($s.0, $s.1, $s.2, Block::new(vec!())))
+            },
+            (function -> s:function_signature b:block_2 END) => {
+                Ok(Function::new($s.0, $s.1, $s.2, $b))
+            },
+
+            (range -> low:exp COLON high:exp) => {Ok(Range::new($low, $high))},
+
+            (comparison_op -> DOUBLEEQU) => {Ok(BinOp::Equ)},
+            (comparison_op -> NEQ) => {Ok(BinOp::Neq)},
+            (comparison_op -> LT) => {Ok(BinOp::Lt)},
+            (comparison_op -> LEQ) => {Ok(BinOp::Leq)},
+            (comparison_op -> GT) => {Ok(BinOp::Gt)},
+            (comparison_op -> GEQ) => {Ok(BinOp::Geq)},
+
+            (sum_op -> PLUS) => {Ok(BinOp::Plus)},
+            (sum_op -> MINUS) => {Ok(BinOp::Minus)},
+
+            (product_op -> TIMES) => {Ok(BinOp::Times)},
+            (product_op -> DIV) => {Ok(BinOp::Div)},
+
+            (exp -> e:exp_return) => {Ok($e)},
+            (clean_exp -> e:exp_clean_return) => {Ok($e)},
+
+            (exp_return -> RETURN e:exp_assign) => {
+                Ok(Exp::new(ExpVal::Return($e)))
+            },
+            (exp_return -> e:exp_assign) => {Ok($e)},
+            (exp_clean_return -> RETURN e:exp_assign) => {
+                Ok(Exp::new(ExpVal::Return($e)))
+            },
+            (exp_clean_return -> e:exp_clean_assign) => {Ok($e)},
+
+            (exp_assign -> l:lvalue EQU r:exp_disjunctions) => {
+                Ok(Exp::new(ExpVal::Assign($l, $r)))
+            },
+            (exp_assign -> e:exp_disjunctions) => {Ok($e)},
+            (exp_clean_assign -> l:lvalue EQU r:exp_disjunctions) => {
+                Ok(Exp::new(ExpVal::Assign($l, $r)))
+            },
+            (exp_clean_assign -> e:exp_clean_disjunctions) => {Ok($e)},
+
             (exp_disjunctions -> l:exp_disjunctions OR r:exp_conjunctions) => {
                 Ok(Exp::new(ExpVal::BinOp(BinOp::Or, $l, $r)))
             },
             (exp_disjunctions -> e:exp_conjunctions) => {
                 Ok($e)
             },
+            (exp_clean_disjunctions -> l:exp_clean_disjunctions OR r:exp_conjunctions) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::Or, $l, $r)))
+            },
+            (exp_clean_disjunctions -> e:exp_clean_conjunctions) => {
+                Ok($e)
+            },
 
             (exp_conjunctions -> l:exp_conjunctions AND r:exp_comparisons) => {
                 Ok(Exp::new(ExpVal::BinOp(BinOp::And, $l, $r)))
             },
-            (exp_conjunctions -> e:exp_comparisons) => {
+            (exp_conjunctions -> e:exp_comparisons) => {Ok($e)},
+            (exp_clean_conjunctions -> l:exp_clean_conjunctions AND r:exp_comparisons) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::And, $l, $r)))
+            },
+            (exp_clean_conjunctions -> e:exp_clean_comparisons) => {Ok($e)},
+
+            (exp_comparisons -> l:exp_comparisons op:comparison_op r:exp_sums) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_comparisons -> e:exp_sums) => {Ok($e)},
+            (exp_clean_comparisons -> l:exp_clean_comparisons op:comparison_op r:exp_sums) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_clean_comparisons -> e:exp_clean_sums) => {Ok($e)},
+
+            (exp_sums -> l:exp_sums op:sum_op r:exp_products) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_sums -> e:exp_products) => {Ok($e)},
+            (exp_clean_sums -> l:exp_clean_sums op:sum_op r:exp_products) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_clean_sums -> e:exp_clean_products) => {Ok($e)},
+
+            (exp_products -> l:exp_products op:product_op r:exp_unary) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_products -> e:exp_unary) => {Ok($e)},
+            (exp_clean_products -> l:exp_clean_products op:product_op r:exp_unary) => {
+                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+            },
+            (exp_clean_products -> e:exp_clean_unary) => {Ok($e)},
+
+            (exp_unary -> MINUS e:exp_unary) => {
+                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Neg, $e)))
+            },
+            (exp_unary -> NOT e:exp_unary) => {
+                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Not, $e)))
+            },
+            (exp_unary -> e:exp_powers) => {
                 Ok($e)
+            },
+            (exp_clean_unary -> NOT e:exp_unary) => {
+                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Not, $e)))
+            },
+            (exp_clean_unary -> e:exp_powers) => {
+                Ok($e)
+            },
+
+            (exp_powers -> l:exp_atom POW r:exp_powers) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::Pow, $l, $r)))
+            },
+            (exp_powers -> e:exp_atom) => {
+                Ok($e)
+            },
+
+            (exp_atom -> v:int) => {Ok(Exp::new(ExpVal::Int($v)))},
+            (exp_atom -> v:string) => {Ok(Exp::new(ExpVal::Str($v)))},
+            (exp_atom -> TRUE) => {Ok(Exp::new(ExpVal::Bool(true)))},
+            (exp_atom -> FALSE) => {Ok(Exp::new(ExpVal::Bool(false)))},
+            (exp_atom -> v:lvalue) => {Ok(Exp::new(ExpVal::LValue($v)))},
+            
+            (exp_atom -> ii:intident) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
+                    Exp::new(ExpVal::Int($ii.0)),
+                    Exp::new(ExpVal::LValue(LValue::new(vec!($ii.1))))
+                )))
+            },
+            (exp_atom -> l:intlpar b:block_1 RPAR) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
+                    Exp::new(ExpVal::Int($l)),
+                    Exp::new(ExpVal::Block($b))
+                )))
+            },
+            (exp_atom -> LPAR b:block_1 r:rparident) => {
+                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
+                    Exp::new(ExpVal::Block($b)),
+                    Exp::new(ExpVal::LValue(LValue::new(vec!($r))))
+                )))
+            },
+            (exp_atom -> f:identlpar RPAR) => {
+                Ok(Exp::new(ExpVal::Call($f, vec!())))
+            },
+            (exp_atom -> f:identlpar a:call_args RPAR) => {
+                Ok(Exp::new(ExpVal::Call($f, $a)))
+            },
+
+            (exp_atom -> LPAR b:block_1 RPAR) => {
+                Ok(Exp::new(ExpVal::Block($b)))
+            },
+
+            (call_args -> e:exp) => {
+                Ok(vec!($e))
+            },
+            (call_args -> e:exp COMMA) => {
+                Ok(vec!($e))
+            },
+            (call_args -> e:exp COMMA a:call_args) => {
+                let mut v = $a;
+                v.insert(0, $e);
+                Ok(v)
+            },
+
+            (exp -> IF cond:exp e:else_block) => {
+                Ok(Exp::new(ExpVal::If($cond, Block::new(vec!()), $e)))
+            },
+            (exp -> IF cond:exp b:clean_block_0 e:else_block) => {
+                Ok(Exp::new(ExpVal::If($cond, $b, $e)))
+            },
+
+            (else_block -> END) => {Ok(Else::new(ElseVal::End))},
+            (else_block -> ELSE END) => {
+                Ok(Else::new(ElseVal::Else(Block::new(vec!()))))
+            },
+            (else_block -> ELSE b:block_1 END) => {
+                Ok(Else::new(ElseVal::Else($b)))
+            },
+            (else_block -> ELSEIF cond:exp e:else_block) => {
+                Ok(Else::new(ElseVal::ElseIf($cond, Block::new(vec!()), $e)))
+            },
+            (else_block -> ELSEIF cond:exp b:clean_block_0 e:else_block) => {
+                Ok(Else::new(ElseVal::ElseIf($cond, $b, $e)))
+            },
+
+            (exp -> FOR id:located_ident EQU range:range END) => {
+                Ok(Exp::new(ExpVal::For($id, $range, Block::new(vec!()))))
+            },
+            (exp -> FOR id:located_ident EQU range:range b:clean_block_0 END) => {
+                Ok(Exp::new(ExpVal::For($id, $range, $b)))
+            },
+
+            (exp -> WHILE cond:exp END) => {
+                Ok(Exp::new(ExpVal::While($cond, Block::new(vec!()))))
+            },
+            (exp -> WHILE cond:exp b:clean_block_0 END) => {
+                Ok(Exp::new(ExpVal::While($cond, $b)))
+            },
+
+            (lvalue -> l:lvalue DOT r:ident) => {
+                let mut v = $l.val;
+                v.push($r);
+                Ok(LValue::new(v))
+            },
+            (lvalue -> id:ident) => {
+                Ok(LValue::new(vec!($id)))
+            },
+            
+            (block_0 -> e:exp) => {Ok(Block::new(vec!($e)))},
+            (block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
+            (block_0 -> e:exp b:block_2) => {
+                let mut v = $b.val;
+                v.insert(0, $e);
+                Ok(Block::new(v))
+            },
+            (clean_block_0 -> e:clean_exp) => {Ok(Block::new(vec!($e)))},
+            (clean_block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
+            (clean_block_0 -> e:clean_exp b:block_2) => {
+                let mut v = $b.val;
+                v.insert(0, $e);
+                Ok(Block::new(v))
+            },
+            (block_1 -> e:exp) => {Ok(Block::new(vec!($e)))},
+            (block_1 -> e:exp b:block_2) => {
+                let mut v = $b.val;
+                v.insert(0, $e);
+                Ok(Block::new(v))
+            },
+            (block_2 -> SEMICOLON) => {Ok(Block::new(vec!()))},
+            (block_2 -> SEMICOLON b:block_2) => {
+                Ok(Block::new($b.val))
+            },
+            (block_2 -> SEMICOLON e:exp b:block_2) => {
+                let mut v = $b.val;
+                v.insert(0, $e);
+                Ok(Block::new(v))
             },
         }
 
-        start: exp_disjunctions
+        start: file
     };
+
+    println!("{:?}", ast?);
 
     Ok(())
 }
 
-fn main() -> Result<(), String> {
-    let file_name = "test.pj";
+fn run(file_name: &str) -> Result<(), String> {
     let path = Path::new(file_name);
     let display = path.display();
 
@@ -451,6 +811,26 @@ fn main() -> Result<(), String> {
     file.read_to_string(&mut s).map_err(|e| e.to_string())?;
    
     parse(file_name, &s).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn main() -> Result<(), String> {
+    let matches = App::new("petit-julia")
+        .version("1.0")
+        .author("Julien Marquet")
+        .subcommand(SubCommand::with_name("run")
+            .about("Runs the given program")
+            .arg(Arg::with_name("input")
+                .help("The netlist to simulate")
+                .required(true)
+                .index(1)))
+        .get_matches();
+
+    if let Some(matches) = matches.subcommand_matches("run") {
+        let file_name = matches.value_of("input").unwrap();
+        run(file_name)?;
+    }
 
     Ok(())
 }
