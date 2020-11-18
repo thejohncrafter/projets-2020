@@ -148,6 +148,7 @@ impl<'a, I> Builder<'a, I> where
 
     pub fn build(&mut self) -> MachineTable {
         self.build_states();
+        
         self.states.iter().map(|(items, trans)| {
             let mut actions = vec![None; self.term_count];
             let mut goto = vec![Goto::None; self.nterm_count];

@@ -29,6 +29,7 @@ impl<T> PDA<T> {
     pub fn parse<I, S, E>(
         mut self,
         tokens: &mut I,
+        on_empty: &dyn Fn() -> Result<T, String>,
         builders: &[&dyn Fn(Vec<Option<T>>) -> Result<T, String>],
     ) -> Result<T, E>
         where I: Iterator<Item = Result<(S, TokenOrEof<(usize, T)>), E>>,
@@ -43,6 +44,10 @@ impl<T> PDA<T> {
             }
         }));
         let mut token = tokens.next().unwrap()?;
+
+        if let None = token.2 {
+            return on_empty().map_err(|msg| (token.0, msg).into())
+        }
 
         loop {
             fn expect_state<T>(x: &StackItem<T>) -> usize {

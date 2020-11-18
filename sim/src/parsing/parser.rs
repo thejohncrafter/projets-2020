@@ -288,6 +288,7 @@ pub fn parse_netlist<'a>(file_name: &'a str, contents: &'a str) -> Result<Netlis
             },
         }
 
+        on_empty: {Err("Expected a netlist".to_string())}
         start: netlist
     };
 

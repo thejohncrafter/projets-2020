@@ -129,7 +129,9 @@ impl<'a> IndexedInput<'a> for IndexedString<'a> {
     }
 
     fn slice(&self, span: &Self::Span) -> &'a str {
-        &self.s[span.start.0 ..= span.end.0]
+        let start_i = self.s.char_indices().nth(span.start.0).unwrap().0;
+        let end_i = self.s.char_indices().nth(span.end.0).unwrap().0;
+        &self.s[start_i ..= end_i]
     }
 }
 

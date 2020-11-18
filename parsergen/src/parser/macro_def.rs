@@ -25,6 +25,7 @@ fn check(input: &MacroInput) -> Result<()> {
 
     check_tokens(&tokens)?;
     input.tokenizer.body.check(&terms)?;
+    input.on_empty.check(&vec!())?;
 
     input.rules.iter().try_for_each::<_, Result<()>>(|rule| {
         let vars = rule.expand.iter().filter_map(|(x, _)| {
@@ -209,9 +210,14 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 Ident::new(&format!("prod_{}", i + 1), Span::mixed_site())
             });
 
+            let on_empty_fn = Ident::new("on_empty", Span::mixed_site());
+            let start_token = input.start_token.to_string();
+            let start_token_ident = Ident::new(&start_token, Span::mixed_site());
+            let start_token_type = token_types.get(&start_token).unwrap();
+            let on_empty = &input.on_empty.contents;
+
             let table_data = build_table_data(&input);
             let serialized_table = serialize_table_data(&table_data);
-            let start_token = input.start_token.to_string();
             let into_result_type = Ident::new(&format!("into_{}", start_token), Span::mixed_site());
 
             quote! {
@@ -232,9 +238,14 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
                     #serialized_table
 
+                    fn #on_empty_fn() -> Result<#start_token_type, String> {
+                        #on_empty
+                    }
+
                     let pda = build_pda::<#holder_ident>(&terms, &nterms, &prods, #start_token);
                     let res = pda.parse(
                         &mut tokens_iter,
+                        &mut || #on_empty_fn().map(|x| Holder::#start_token_ident(x)),
                         &rules,
                     );
 

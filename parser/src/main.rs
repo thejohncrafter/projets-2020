@@ -1,6 +1,7 @@
 
 mod ast;
 
+use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -86,7 +87,7 @@ enum PreToken {
     Token(Token),
 }
 
-fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>> {
+fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadError<'a>> {
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
@@ -149,12 +150,13 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
         input: {&input}
 
         ((' ' | '\t') & (' ' | '\t')*) => {Ok(PreToken::None)},
+        ('#' & (behaved | '\\' | '"')* & '\n') => {Ok(PreToken::Newline)}, 
         ('\n') => {Ok(PreToken::Newline)},
 
         ((alpha | '_') & (alpha | '_' | num)*) => {
             Ok(ident_or_keyword($text).into_pre_token())
         },
-        (('-' | _) & num & num*) => {Ok(PreToken::Token(Token::Int({
+        (num & num*) => {Ok(PreToken::Token(Token::Int({
             parse_i64($text)?
         })))},
         ('"' & (behaved | '\\' & ('\\' | '"' | 'n' | 't'))* & '"') => {
@@ -162,7 +164,7 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             Ok(PreToken::Token(Token::Str($text.to_string())))
         },
 
-        (('-' | _) & num* & alpha & (alpha | num)*) => {
+        (num & num* & alpha & (alpha | num)*) => {
             let i = $text.chars().enumerate()
                 .find_map(|(i, c)| {
                     if !(c == '-' || c.is_ascii_digit()) {Some(i)}
@@ -183,7 +185,7 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                     .expect_ident()?
             )))
         },
-        (('-' | _) & num* & '(') => {
+        (num & num* & '(') => {
             let last = $text.chars().enumerate().map(|(i, _)| i).last().unwrap();
             Ok(PreToken::Token(Token::IntLPar(parse_i64(
                     &$text.chars().take(last).collect::<String>()
@@ -280,10 +282,12 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                                 };
 
                                 if let Token::Keyword(Keyword::If) = token {
-                                    return Some(Err((
-                                        span,
-                                        "Illegal \"if\" after \"else\" (please use \"elif\").".to_string()
-                                    ).into()))
+                                    if self.saw_else {
+                                        return Some(Err((
+                                            span,
+                                            "Illegal \"if\" after \"else\" (please use \"elif\").".to_string()
+                                        ).into()))
+                                    }
                                 }
 
                                 if let Token::Keyword(Keyword::Else) = token {
@@ -518,10 +522,15 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
 
             (located_ident -> id:ident) => {Ok(LocatedIdent::new($id))},
 
-            (fields -> COLON) => {Ok(vec!())},
-            (fields -> p:param COLON f:fields) => {
+            (fields -> p:param) => {Ok(vec!($p))},
+            (fields -> SEMICOLON) => {Ok(vec!())},
+            (fields -> SEMICOLON p:param) => {Ok(vec!($p))},
+            (fields -> f:fields SEMICOLON) => {
+                Ok($f)
+            },
+            (fields -> f:fields SEMICOLON p:param) => {
                 let mut v = $f;
-                v.insert(0, $p);
+                v.push($p);
                 Ok(v)
             },
 
@@ -686,9 +695,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
                     Exp::new(ExpVal::Block($b))
                 )))
             },
-            (exp_atom -> LPAR b:block_1 r:rparident) => {
+            (exp_atom -> LPAR e:exp r:rparident) => {
                 Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
-                    Exp::new(ExpVal::Block($b)),
+                    $e,
                     Exp::new(ExpVal::LValue(LValue::new(vec!($r))))
                 )))
             },
@@ -726,7 +735,7 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             (else_block -> ELSE END) => {
                 Ok(Else::new(ElseVal::Else(Block::new(vec!()))))
             },
-            (else_block -> ELSE b:block_1 END) => {
+            (else_block -> ELSE b:block_0 END) => {
                 Ok(Else::new(ElseVal::Else($b)))
             },
             (else_block -> ELSEIF cond:exp e:else_block) => {
@@ -761,16 +770,20 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             
             (block_0 -> e:exp) => {Ok(Block::new(vec!($e)))},
             (block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
-            (block_0 -> e:exp b:block_2) => {
+            (block_0 -> SEMICOLON e:exp) => {Ok(Block::new(vec!($e)))},
+            (block_0 -> b:block_0 SEMICOLON) => {Ok($b)},
+            (block_0 -> b:block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
-                v.insert(0, $e);
+                v.push($e);
                 Ok(Block::new(v))
             },
             (clean_block_0 -> e:clean_exp) => {Ok(Block::new(vec!($e)))},
             (clean_block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
-            (clean_block_0 -> e:clean_exp b:block_2) => {
+            (clean_block_0 -> SEMICOLON e:exp) => {Ok(Block::new(vec!($e)))},
+            (clean_block_0 -> b:clean_block_0 SEMICOLON) => {Ok($b)},
+            (clean_block_0 -> b:clean_block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
-                v.insert(0, $e);
+                v.push($e);
                 Ok(Block::new(v))
             },
             (block_1 -> e:exp) => {Ok(Block::new(vec!($e)))},
@@ -783,6 +796,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             (block_2 -> SEMICOLON b:block_2) => {
                 Ok(Block::new($b.val))
             },
+            (block_2 -> SEMICOLON e:exp) => {
+                Ok(Block::new(vec!($e)))
+            },
             (block_2 -> SEMICOLON e:exp b:block_2) => {
                 let mut v = $b.val;
                 v.insert(0, $e);
@@ -790,12 +806,11 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<(), ReadError<'a>>
             },
         }
 
+        on_empty: {Ok(Vec::new())}
         start: file
     };
 
-    println!("{:?}", ast?);
-
-    Ok(())
+    Ok(ast?)
 }
 
 fn run(file_name: &str) -> Result<(), String> {
@@ -810,7 +825,89 @@ fn run(file_name: &str) -> Result<(), String> {
     let mut s = String::new();
     file.read_to_string(&mut s).map_err(|e| e.to_string())?;
    
-    parse(file_name, &s).map_err(|e| e.to_string())?;
+    let ast = parse(file_name, &s).map_err(|e| e.to_string())?;
+
+    println!("{:?}", ast);
+
+    Ok(())
+}
+
+fn test(dir_name: &str) -> Result<(), String> {
+    /*
+     * Returns true if all the tests pass.
+     */
+    fn test<'a, I: Iterator<Item = std::path::PathBuf>>(tests: I, expect_success: bool)
+        -> Result<bool, String>
+    {
+        let mut failed = false;
+
+        for path in tests {
+            let display = path.display();
+            let mut file = match File::open(&path) {
+                Err(why) => panic!("Couldn't open {} : {}", display, why),
+                Ok(file) => file,
+            };
+
+            let mut s = String::new();
+            file.read_to_string(&mut s).map_err(|e| e.to_string())?;
+
+            let file_name = path.file_name().and_then(|n| n.to_str()).map(|n| n.to_string()).unwrap_or("test".to_string());
+            match parse(&file_name, &s) {
+                Ok(_) => {
+                    if expect_success {
+                        println!("    \u{2713} {}", file_name);
+                    } else {
+                        failed = true;
+                        println!("    \u{2717} {} : expected a failure, got a success", file_name);
+                    }
+                },
+                Err(_) => {
+                    if expect_success {
+                        failed = true;
+                        println!("    \u{2717} {} : expected a success, got a failure", file_name);
+                    } else {
+                        // "Task failed successfully."
+                        println!("    \u{2713} {}", file_name);
+                    }
+                }
+            }
+        }
+
+        Ok(failed)
+    }
+ 
+    fn get_paths(path: &Path) -> Result<Vec<std::path::PathBuf>, String> {
+        let mut members = Vec::new();
+
+        fs::read_dir(&path)
+            .map_err(|e| e.to_string())?
+            .map(|e| e.map_err(|e| e.to_string()).map(|e| e.path()))
+            .try_for_each(|e| -> Result<(), String> {members.push(e?); Ok(())})?;
+
+        members.sort();
+        Ok(members)
+    }
+
+    let good_name = format!("{}/good", dir_name);
+    let good_path = Path::new(&good_name);
+    let bad_name = format!("{}/bad", dir_name);
+    let bad_path = Path::new(&bad_name);
+
+    let good_tests = get_paths(good_path)?;
+
+    let bad_tests = get_paths(bad_path)?;
+    
+    let mut failed = false;
+    println!("Testing \"good\" inputs :");
+    failed = failed || test(good_tests.into_iter(), true)?;
+    println!("Testing \"bad\" inputs :");
+    failed = failed || test(bad_tests.into_iter(), false)?;
+
+    if failed {
+        println!("*** FAILED ***");
+    } else {
+        println!("*** SUCCESS ***");
+    }
 
     Ok(())
 }
@@ -822,7 +919,13 @@ fn main() -> Result<(), String> {
         .subcommand(SubCommand::with_name("run")
             .about("Runs the given program")
             .arg(Arg::with_name("input")
-                .help("The netlist to simulate")
+                .help("The program to run")
+                .required(true)
+                .index(1)))
+        .subcommand(SubCommand::with_name("test")
+            .about("Runs all the tests")
+            .arg(Arg::with_name("input")
+                .help("The directory that contains the tests")
                 .required(true)
                 .index(1)))
         .get_matches();
@@ -830,6 +933,9 @@ fn main() -> Result<(), String> {
     if let Some(matches) = matches.subcommand_matches("run") {
         let file_name = matches.value_of("input").unwrap();
         run(file_name)?;
+    } else if let Some(matches) = matches.subcommand_matches("test") {
+        let dir_name = matches.value_of("input").unwrap();
+        test(dir_name)?;
     }
 
     Ok(())
