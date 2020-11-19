@@ -160,7 +160,7 @@ fn build_rules(types_info: &TypesInfo, token_types: &HashMap<String, &Type>, rul
                 #body
             }
 
-            let #closure_ident = |span: #span_ty, mut a: Vec<Option<#holder_ident>>|
+            let #closure_ident = |span: #span_ty, mut a: Vec<Option<#holder_ident<#src_lifetime>>>|
                 #fn_ident(span, #(#args_getters),*).map(|x| #holder_ident::#fn_return_variant(x));
         }
     }).flatten().collect()
@@ -258,7 +258,7 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
                     #serialized_table
 
-                    fn #on_empty_fn() -> Result<#start_token_type, String> {
+                    fn #on_empty_fn<#src_lifetime>() -> Result<#start_token_type, String> {
                         #on_empty
                     }
 

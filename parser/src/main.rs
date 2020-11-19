@@ -87,7 +87,7 @@ enum PreToken {
     Token(Token),
 }
 
-fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadError<'a>> {
+fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>, ReadError<'a>> {
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
@@ -364,24 +364,24 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
             DOT: (),
         ]
         nterms: [
-            file: Vec<Decl>,
+            file: Vec<Decl<'a>>,
 
-            located_ident: LocatedIdent,
+            located_ident: LocatedIdent<'a>,
 
-            decl: Decl,
+            decl: Decl<'a>,
            
-            param: Param,
-            params: Vec<Param>,
+            param: Param<'a>,
+            params: Vec<Param<'a>>,
 
-            fields: Vec<Param>,
+            fields: Vec<Param<'a>>,
             struct_head: bool,
-            structure: Structure,
+            structure: Structure<'a>,
 
-            function_head: (String, Vec<Param>),
-            function_signature: (String, Vec<Param>, Option<LocatedIdent>),
-            function: Function,
+            function_head: (String, Vec<Param<'a>>),
+            function_signature: (String, Vec<Param<'a>>, Option<LocatedIdent<'a>>),
+            function: Function<'a>,
 
-            range: Range,
+            range: Range<'a>,
 
             comparison_op: BinOp,
             sum_op: BinOp,
@@ -391,44 +391,44 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
             // start with a "-"
             // (defined in order to unambiguously define rules
             // where "exp exp" appears).
-            exp: Exp,
-            clean_exp: Exp,
-            exp_return: Exp,
-            exp_clean_return: Exp,
-            exp_assign: Exp,
-            exp_clean_assign: Exp,
-            exp_disjunctions: Exp,
-            exp_clean_disjunctions: Exp,
-            exp_conjunctions: Exp,
-            exp_clean_conjunctions: Exp,
-            exp_comparisons: Exp,
-            exp_clean_comparisons: Exp,
-            exp_sums: Exp,
-            exp_clean_sums: Exp,
-            exp_products: Exp,
-            exp_clean_products: Exp,
-            exp_unary: Exp,
-            exp_clean_unary: Exp,
-            exp_powers: Exp,
-            exp_atom: Exp,
+            exp: Exp<'a>,
+            clean_exp: Exp<'a>,
+            exp_return: Exp<'a>,
+            exp_clean_return: Exp<'a>,
+            exp_assign: Exp<'a>,
+            exp_clean_assign: Exp<'a>,
+            exp_disjunctions: Exp<'a>,
+            exp_clean_disjunctions: Exp<'a>,
+            exp_conjunctions: Exp<'a>,
+            exp_clean_conjunctions: Exp<'a>,
+            exp_comparisons: Exp<'a>,
+            exp_clean_comparisons: Exp<'a>,
+            exp_sums: Exp<'a>,
+            exp_clean_sums: Exp<'a>,
+            exp_products: Exp<'a>,
+            exp_clean_products: Exp<'a>,
+            exp_unary: Exp<'a>,
+            exp_clean_unary: Exp<'a>,
+            exp_powers: Exp<'a>,
+            exp_atom: Exp<'a>,
 
-            lvalue: LValue,
+            lvalue: LValue<'a>,
 
-            else_block: Else,
+            else_block: Else<'a>,
 
-            call_args: Vec<Exp>,
+            call_args: Vec<Exp<'a>>,
 
-            block_0: Block,
+            block_0: Block<'a>,
             // A block that does not start with "-" (see comment
             // on clean expressions above.
-            clean_block_0: Block,
+            clean_block_0: Block<'a>,
             // We can only define block_1, and not block
             // as in the specification, because
             // with this generator it is impossible
             // to parse tokens that expand to an empty
             // sequence.
-            block_1: Block,
-            block_2: Block, // A block that starts with a semicolon and
+            block_1: Block<'a>,
+            block_2: Block<'a>, // A block that starts with a semicolon and
                             // that can be just a sequence of semicolons.
         ]
         
@@ -519,11 +519,11 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
                 Ok(v)
             },
 
-            (decl -> s:structure SEMICOLON) => {Ok(Decl::new(DeclVal::Structure($s)))},
-            (decl -> f:function SEMICOLON) => {Ok(Decl::new(DeclVal::Function($f)))},
-            (decl -> e:exp SEMICOLON) => {Ok(Decl::new(DeclVal::Exp($e)))},
+            (decl -> s:structure SEMICOLON) => {Ok(Decl::new($span, DeclVal::Structure($s)))},
+            (decl -> f:function SEMICOLON) => {Ok(Decl::new($span, DeclVal::Function($f)))},
+            (decl -> e:exp SEMICOLON) => {Ok(Decl::new($span, DeclVal::Exp($e)))},
 
-            (located_ident -> id:ident) => {Ok(LocatedIdent::new($id))},
+            (located_ident -> id:ident) => {Ok(LocatedIdent::new($span, $id))},
 
             (fields -> p:param) => {Ok(vec!($p))},
             (fields -> SEMICOLON) => {Ok(vec!())},
@@ -540,15 +540,15 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
             (struct_head -> STRUCT) => {Ok(false)},
             (struct_head -> MUTABLE STRUCT) => {Ok(true)},
             (structure -> mutable:struct_head name:located_ident END) => {
-                Ok(Structure::new($mutable, $name, vec!()))
+                Ok(Structure::new($span, $mutable, $name, vec!()))
             },
             (structure -> mutable:struct_head name:located_ident f:fields END) => {
-                Ok(Structure::new($mutable, $name, $f))
+                Ok(Structure::new($span, $mutable, $name, $f))
             },
 
-            (param -> name:located_ident) => {Ok(Param::new($name, None))},
+            (param -> name:located_ident) => {Ok(Param::new($span, $name, None))},
             (param -> name:located_ident DOUBLECOLON ty:located_ident) => {
-                Ok(Param::new($name, Some($ty)))
+                Ok(Param::new($span, $name, Some($ty)))
             },
 
             (params -> p:param) => {Ok(vec!($p))},
@@ -566,13 +566,13 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
                 Ok(($h.0, $h.1, Some($ty)))
             },
             (function -> s:function_signature END) => {
-                Ok(Function::new($s.0, $s.1, $s.2, Block::new(vec!())))
+                Ok(Function::new($span, $s.0, $s.1, $s.2, Block::new($span, vec!())))
             },
             (function -> s:function_signature b:block_2 END) => {
-                Ok(Function::new($s.0, $s.1, $s.2, $b))
+                Ok(Function::new($span, $s.0, $s.1, $s.2, $b))
             },
 
-            (range -> low:exp COLON high:exp) => {Ok(Range::new($low, $high))},
+            (range -> low:exp COLON high:exp) => {Ok(Range::new($span, $low, $high))},
 
             (comparison_op -> DOUBLEEQU) => {Ok(BinOp::Equ)},
             (comparison_op -> NEQ) => {Ok(BinOp::Neq)},
@@ -591,128 +591,128 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
             (clean_exp -> e:exp_clean_return) => {Ok($e)},
 
             (exp_return -> RETURN e:exp_assign) => {
-                Ok(Exp::new(ExpVal::Return($e)))
+                Ok(Exp::new($span, ExpVal::Return($e)))
             },
             (exp_return -> e:exp_assign) => {Ok($e)},
             (exp_clean_return -> RETURN e:exp_assign) => {
-                Ok(Exp::new(ExpVal::Return($e)))
+                Ok(Exp::new($span, ExpVal::Return($e)))
             },
             (exp_clean_return -> e:exp_clean_assign) => {Ok($e)},
 
             (exp_assign -> l:lvalue EQU r:exp_disjunctions) => {
-                Ok(Exp::new(ExpVal::Assign($l, $r)))
+                Ok(Exp::new($span, ExpVal::Assign($l, $r)))
             },
             (exp_assign -> e:exp_disjunctions) => {Ok($e)},
             (exp_clean_assign -> l:lvalue EQU r:exp_disjunctions) => {
-                Ok(Exp::new(ExpVal::Assign($l, $r)))
+                Ok(Exp::new($span, ExpVal::Assign($l, $r)))
             },
             (exp_clean_assign -> e:exp_clean_disjunctions) => {Ok($e)},
 
             (exp_disjunctions -> l:exp_disjunctions OR r:exp_conjunctions) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Or, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Or, $l, $r)))
             },
             (exp_disjunctions -> e:exp_conjunctions) => {
                 Ok($e)
             },
             (exp_clean_disjunctions -> l:exp_clean_disjunctions OR r:exp_conjunctions) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Or, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Or, $l, $r)))
             },
             (exp_clean_disjunctions -> e:exp_clean_conjunctions) => {
                 Ok($e)
             },
 
             (exp_conjunctions -> l:exp_conjunctions AND r:exp_comparisons) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::And, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::And, $l, $r)))
             },
             (exp_conjunctions -> e:exp_comparisons) => {Ok($e)},
             (exp_clean_conjunctions -> l:exp_clean_conjunctions AND r:exp_comparisons) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::And, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::And, $l, $r)))
             },
             (exp_clean_conjunctions -> e:exp_clean_comparisons) => {Ok($e)},
 
             (exp_comparisons -> l:exp_comparisons op:comparison_op r:exp_sums) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_comparisons -> e:exp_sums) => {Ok($e)},
             (exp_clean_comparisons -> l:exp_clean_comparisons op:comparison_op r:exp_sums) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_clean_comparisons -> e:exp_clean_sums) => {Ok($e)},
 
             (exp_sums -> l:exp_sums op:sum_op r:exp_products) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_sums -> e:exp_products) => {Ok($e)},
             (exp_clean_sums -> l:exp_clean_sums op:sum_op r:exp_products) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_clean_sums -> e:exp_clean_products) => {Ok($e)},
 
             (exp_products -> l:exp_products op:product_op r:exp_unary) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_products -> e:exp_unary) => {Ok($e)},
             (exp_clean_products -> l:exp_clean_products op:product_op r:exp_unary) => {
-                Ok(Exp::new(ExpVal::BinOp($op, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp($op, $l, $r)))
             },
             (exp_clean_products -> e:exp_clean_unary) => {Ok($e)},
 
             (exp_unary -> MINUS e:exp_unary) => {
-                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Neg, $e)))
+                Ok(Exp::new($span, ExpVal::UnaryOp(UnaryOp::Neg, $e)))
             },
             (exp_unary -> NOT e:exp_unary) => {
-                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Not, $e)))
+                Ok(Exp::new($span, ExpVal::UnaryOp(UnaryOp::Not, $e)))
             },
             (exp_unary -> e:exp_powers) => {
                 Ok($e)
             },
             (exp_clean_unary -> NOT e:exp_unary) => {
-                Ok(Exp::new(ExpVal::UnaryOp(UnaryOp::Not, $e)))
+                Ok(Exp::new($span, ExpVal::UnaryOp(UnaryOp::Not, $e)))
             },
             (exp_clean_unary -> e:exp_powers) => {
                 Ok($e)
             },
 
             (exp_powers -> l:exp_atom POW r:exp_powers) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Pow, $l, $r)))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Pow, $l, $r)))
             },
             (exp_powers -> e:exp_atom) => {
                 Ok($e)
             },
 
-            (exp_atom -> v:int) => {Ok(Exp::new(ExpVal::Int($v)))},
-            (exp_atom -> v:string) => {Ok(Exp::new(ExpVal::Str($v)))},
-            (exp_atom -> TRUE) => {Ok(Exp::new(ExpVal::Bool(true)))},
-            (exp_atom -> FALSE) => {Ok(Exp::new(ExpVal::Bool(false)))},
-            (exp_atom -> v:lvalue) => {Ok(Exp::new(ExpVal::LValue($v)))},
+            (exp_atom -> v:int) => {Ok(Exp::new($span, ExpVal::Int($v)))},
+            (exp_atom -> v:string) => {Ok(Exp::new($span, ExpVal::Str($v)))},
+            (exp_atom -> TRUE) => {Ok(Exp::new($span, ExpVal::Bool(true)))},
+            (exp_atom -> FALSE) => {Ok(Exp::new($span, ExpVal::Bool(false)))},
+            (exp_atom -> v:lvalue) => {Ok(Exp::new($span, ExpVal::LValue($v)))},
             
             (exp_atom -> ii:intident) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
-                    Exp::new(ExpVal::Int($ii.0)),
-                    Exp::new(ExpVal::LValue(LValue::new(vec!($ii.1))))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
+                    Exp::new($span, ExpVal::Int($ii.0)),
+                    Exp::new($span, ExpVal::LValue(LValue::new($span, vec!($ii.1))))
                 )))
             },
             (exp_atom -> l:intlpar b:block_1 RPAR) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
-                    Exp::new(ExpVal::Int($l)),
-                    Exp::new(ExpVal::Block($b))
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
+                    Exp::new($span, ExpVal::Int($l)),
+                    Exp::new($span, ExpVal::Block($b))
                 )))
             },
             (exp_atom -> LPAR e:exp r:rparident) => {
-                Ok(Exp::new(ExpVal::BinOp(BinOp::Times,
+                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
                     $e,
-                    Exp::new(ExpVal::LValue(LValue::new(vec!($r))))
+                    Exp::new($span, ExpVal::LValue(LValue::new($span, vec!($r))))
                 )))
             },
             (exp_atom -> f:identlpar RPAR) => {
-                Ok(Exp::new(ExpVal::Call($f, vec!())))
+                Ok(Exp::new($span, ExpVal::Call($f, vec!())))
             },
             (exp_atom -> f:identlpar a:call_args RPAR) => {
-                Ok(Exp::new(ExpVal::Call($f, $a)))
+                Ok(Exp::new($span, ExpVal::Call($f, $a)))
             },
 
             (exp_atom -> LPAR b:block_1 RPAR) => {
-                Ok(Exp::new(ExpVal::Block($b)))
+                Ok(Exp::new($span, ExpVal::Block($b)))
             },
 
             (call_args -> e:exp) => {
@@ -728,84 +728,84 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
             },
 
             (exp -> IF cond:exp e:else_block) => {
-                Ok(Exp::new(ExpVal::If($cond, Block::new(vec!()), $e)))
+                Ok(Exp::new($span, ExpVal::If($cond, Block::new($span, vec!()), $e)))
             },
             (exp -> IF cond:exp b:clean_block_0 e:else_block) => {
-                Ok(Exp::new(ExpVal::If($cond, $b, $e)))
+                Ok(Exp::new($span, ExpVal::If($cond, $b, $e)))
             },
 
-            (else_block -> END) => {Ok(Else::new(ElseVal::End))},
+            (else_block -> END) => {Ok(Else::new($span, ElseVal::End))},
             (else_block -> ELSE END) => {
-                Ok(Else::new(ElseVal::Else(Block::new(vec!()))))
+                Ok(Else::new($span, ElseVal::Else(Block::new($span, vec!()))))
             },
             (else_block -> ELSE b:block_0 END) => {
-                Ok(Else::new(ElseVal::Else($b)))
+                Ok(Else::new($span, ElseVal::Else($b)))
             },
             (else_block -> ELSEIF cond:exp e:else_block) => {
-                Ok(Else::new(ElseVal::ElseIf($cond, Block::new(vec!()), $e)))
+                Ok(Else::new($span, ElseVal::ElseIf($cond, Block::new($span, vec!()), $e)))
             },
             (else_block -> ELSEIF cond:exp b:clean_block_0 e:else_block) => {
-                Ok(Else::new(ElseVal::ElseIf($cond, $b, $e)))
+                Ok(Else::new($span, ElseVal::ElseIf($cond, $b, $e)))
             },
 
             (exp -> FOR id:located_ident EQU range:range END) => {
-                Ok(Exp::new(ExpVal::For($id, $range, Block::new(vec!()))))
+                Ok(Exp::new($span, ExpVal::For($id, $range, Block::new($span, vec!()))))
             },
             (exp -> FOR id:located_ident EQU range:range b:clean_block_0 END) => {
-                Ok(Exp::new(ExpVal::For($id, $range, $b)))
+                Ok(Exp::new($span, ExpVal::For($id, $range, $b)))
             },
 
             (exp -> WHILE cond:exp END) => {
-                Ok(Exp::new(ExpVal::While($cond, Block::new(vec!()))))
+                Ok(Exp::new($span, ExpVal::While($cond, Block::new($span, vec!()))))
             },
             (exp -> WHILE cond:exp b:clean_block_0 END) => {
-                Ok(Exp::new(ExpVal::While($cond, $b)))
+                Ok(Exp::new($span, ExpVal::While($cond, $b)))
             },
 
             (lvalue -> l:lvalue DOT r:ident) => {
                 let mut v = $l.val;
                 v.push($r);
-                Ok(LValue::new(v))
+                Ok(LValue::new($span, v))
             },
             (lvalue -> id:ident) => {
-                Ok(LValue::new(vec!($id)))
+                Ok(LValue::new($span, vec!($id)))
             },
             
-            (block_0 -> e:exp) => {Ok(Block::new(vec!($e)))},
-            (block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
-            (block_0 -> SEMICOLON e:exp) => {Ok(Block::new(vec!($e)))},
+            (block_0 -> e:exp) => {Ok(Block::new($span, vec!($e)))},
+            (block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
+            (block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e)))},
             (block_0 -> b:block_0 SEMICOLON) => {Ok($b)},
             (block_0 -> b:block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
                 v.push($e);
-                Ok(Block::new(v))
+                Ok(Block::new($span, v))
             },
-            (clean_block_0 -> e:clean_exp) => {Ok(Block::new(vec!($e)))},
-            (clean_block_0 -> SEMICOLON) => {Ok(Block::new(vec!()))},
-            (clean_block_0 -> SEMICOLON e:exp) => {Ok(Block::new(vec!($e)))},
+            (clean_block_0 -> e:clean_exp) => {Ok(Block::new($span, vec!($e)))},
+            (clean_block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
+            (clean_block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e)))},
             (clean_block_0 -> b:clean_block_0 SEMICOLON) => {Ok($b)},
             (clean_block_0 -> b:clean_block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
                 v.push($e);
-                Ok(Block::new(v))
+                Ok(Block::new($span, v))
             },
-            (block_1 -> e:exp) => {Ok(Block::new(vec!($e)))},
+            (block_1 -> e:exp) => {Ok(Block::new($span, vec!($e)))},
             (block_1 -> e:exp b:block_2) => {
                 let mut v = $b.val;
                 v.insert(0, $e);
-                Ok(Block::new(v))
+                Ok(Block::new($span, v))
             },
-            (block_2 -> SEMICOLON) => {Ok(Block::new(vec!()))},
+            (block_2 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
             (block_2 -> SEMICOLON b:block_2) => {
-                Ok(Block::new($b.val))
+                Ok(Block::new($span, $b.val))
             },
             (block_2 -> SEMICOLON e:exp) => {
-                Ok(Block::new(vec!($e)))
+                Ok(Block::new($span, vec!($e)))
             },
             (block_2 -> SEMICOLON e:exp b:block_2) => {
                 let mut v = $b.val;
                 v.insert(0, $e);
-                Ok(Block::new(v))
+                Ok(Block::new($span, v))
             },
         }
 
