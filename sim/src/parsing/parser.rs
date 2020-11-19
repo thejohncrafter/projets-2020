@@ -73,6 +73,9 @@ pub fn parse_netlist<'a>(file_name: &'a str, contents: &'a str) -> Result<Netlis
     });
     
     let res = parse! {
+        src_lifetime: 'a
+        span: Span<'a>
+
         terms: [
             INPUT: (), OUTPUT: (), VAR: (), IN: (),
             NOT: (),

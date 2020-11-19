@@ -30,7 +30,7 @@ impl<T> PDA<T> {
         mut self,
         tokens: &mut I,
         on_empty: &dyn Fn() -> Result<T, String>,
-        builders: &[&dyn Fn(Vec<Option<T>>) -> Result<T, String>],
+        builders: &[&dyn Fn(S, Vec<Option<T>>) -> Result<T, String>],
     ) -> Result<T, E>
         where I: Iterator<Item = Result<(S, TokenOrEof<(usize, T)>), E>>,
               E: std::error::Error + From<(S, String)>,
@@ -79,7 +79,7 @@ impl<T> PDA<T> {
                     let builder = builders.get(*rule_id).expect(&format!("Missing builder {}.", rule_id));
                    
                     let state = expect_state(self.stack.last().unwrap());
-                    let built = builder(args);
+                    let built = builder(span, args);
                     let id = rule.symbol;
 
                     if let Goto::Some(q) = self.table.get(state).unwrap().1.get(id).unwrap() {

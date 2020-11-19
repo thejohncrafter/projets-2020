@@ -309,6 +309,9 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadErr
     let tokens = Adapter::new(&mut dfa);
 
     let ast = parse! {
+        src_lifetime: 'a
+        span: Span<'a>
+
         terms: [
             int: i64,
             string: String,

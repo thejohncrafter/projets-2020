@@ -1,7 +1,7 @@
 
 use syn::{
     braced, bracketed, parenthesized, Token,
-    Result, Ident, Type,
+    Result, Ident, Type, Lifetime,
 };
 use syn::parse::{Parse, ParseStream};
 
@@ -10,6 +10,8 @@ use crate::hooked_contents::HookedContents;
 mod kw {
     use syn::custom_keyword;
 
+    custom_keyword!(src_lifetime);
+    custom_keyword!(span);
     custom_keyword!(terms);
     custom_keyword!(nterms);
     custom_keyword!(tokens);
@@ -19,6 +21,7 @@ mod kw {
 }
 
 pub struct MacroInput {
+    pub types_info: TypesInfo,
     pub terms: Vec<(Ident, Type)>,
     pub nterms: Vec<(Ident, Type)>,
     pub tokenizer: TokensInput,
@@ -43,6 +46,26 @@ fn parse_names<KW: Parse>(input: ParseStream) -> Result<Vec<(Ident, Type)>> {
     let terms = terms.parse_terminated::<_, Token![,]>(parse_typed)?;
 
     Ok(terms.into_iter().collect())
+}
+
+pub struct TypesInfo {
+    pub src_lifetime: Lifetime,
+    pub span_ty: Type,
+}
+
+fn parse_types_info(input: ParseStream) -> Result<TypesInfo> {
+    input.parse::<kw::src_lifetime>()?;
+    input.parse::<Token![:]>()?;
+    let src_lifetime = input.parse()?;
+
+    input.parse::<kw::span>()?;
+    input.parse::<Token![:]>()?;
+    let span_ty = input.parse()?;
+
+    Ok(TypesInfo {
+        src_lifetime,
+        span_ty,
+    })
 }
 
 pub struct TokensInput {
@@ -128,6 +151,7 @@ fn parse_on_empty(input: ParseStream) -> Result<HookedContents> {
 
 impl Parse for MacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
+        let types_info = parse_types_info(input)?;
         let terms = parse_names::<kw::terms>(input)?;
         let nterms = parse_names::<kw::nterms>(input)?;
         let tokenizer = parse_tokens(input)?;
@@ -139,6 +163,7 @@ impl Parse for MacroInput {
         let start_token = input.parse()?;
 
         Ok(MacroInput {
+            types_info,
             terms,
             nterms,
             tokenizer,

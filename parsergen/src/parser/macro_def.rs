@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use proc_macro2::{TokenStream, Span};
 use quote::quote;
-use syn::{parse_macro_input, Result, Error, Ident, Type};
+use syn::{parse_macro_input, Result, Error, Ident, Type, Lifetime};
 
 use super::input::*;
 
@@ -28,13 +28,16 @@ fn check(input: &MacroInput) -> Result<()> {
     input.on_empty.check(&vec!())?;
 
     input.rules.iter().try_for_each::<_, Result<()>>(|rule| {
-        let vars = rule.expand.iter().filter_map(|(x, _)| {
-            if let Some(ident) = x {
-                Some(ident.to_string())
-            } else {
-                None
-            }
-        }).collect::<Vec<String>>();
+        let vars = rule.expand.iter()
+            .filter_map(|(x, _)| {
+                if let Some(ident) = x {
+                    Some(ident.to_string())
+                } else {
+                    None
+                }
+            })
+            .chain(std::iter::once("span".to_string()))
+            .collect::<Vec<String>>();
 
         rule.block.check(&vars)?;
 
@@ -42,7 +45,13 @@ fn check(input: &MacroInput) -> Result<()> {
             Err(Error::new(rule.token.span(), "No such non-terminal."))?
         }
 
-        rule.expand.iter().try_for_each(|(_, token)| {
+        rule.expand.iter().try_for_each(|(name, token)| {
+            if let Some(name) = name {
+                if name == "span" {
+                    Err(Error::new(name.span(), "Name \"span\" is reserved."))?
+                }
+            }
+
             if !token_names.contains(&token.to_string()) {
                 Err(Error::new(token.span(), "No such token."))
             } else {
@@ -60,7 +69,7 @@ fn check(input: &MacroInput) -> Result<()> {
     Ok(())
 }
 
-fn build_decls(tokens: &[(Ident, Type)]) -> TokenStream {
+fn build_decls(src_lifetime: &Lifetime, tokens: &[(Ident, Type)]) -> TokenStream {
     tokens.iter().enumerate().map(|(i, typed)| {
         let ident = Ident::new(typed.0.to_string().as_str(), Span::mixed_site());
 
@@ -69,12 +78,12 @@ fn build_decls(tokens: &[(Ident, Type)]) -> TokenStream {
         let holder_ident = Ident::new("Holder", Span::mixed_site());
          
         quote! {
-            fn #ident(x: #ty) -> (usize, #holder_ident) {(#i, #holder_ident::#ident(x))}
+            fn #ident<#src_lifetime>(x: #ty) -> (usize, #holder_ident<#src_lifetime>) {(#i, #holder_ident::#ident(x))}
         }
     }).flatten().collect()
 }
 
-fn build_holder(tokens: &[&(Ident, Type)]) -> TokenStream {
+fn build_holder(src_lifetime: &Lifetime, tokens: &[&(Ident, Type)]) -> TokenStream {
     let holder_ident = Ident::new("Holder", Span::mixed_site());
 
     let variants = tokens.iter().map(|(ident, ty)| {
@@ -96,24 +105,29 @@ fn build_holder(tokens: &[&(Ident, Type)]) -> TokenStream {
 
     quote! {
         #[allow(non_camel_case_types)]
-        enum #holder_ident {
+        enum #holder_ident<#src_lifetime> {
+            __PHANTOM_HOLDER(::std::marker::PhantomData<&#src_lifetime ()>),
             #(#variants),*
         }
 
-        impl #holder_ident {
+        impl<#src_lifetime> #holder_ident<#src_lifetime> {
             #intos
         }
     }
 }
 
-fn build_rules(token_types: &HashMap<String, &Type>, rules: &[Rule]) -> TokenStream {
+fn build_rules(types_info: &TypesInfo, token_types: &HashMap<String, &Type>, rules: &[Rule]) -> TokenStream {
     rules.iter().enumerate().map(|(i, rule)| {
+        let src_lifetime = &types_info.src_lifetime;
+        let span_ty = &types_info.span_ty;
         let holder_ident = Ident::new("Holder", Span::mixed_site());
         let fn_ident = Ident::new(&format!("rule_{}", i + 1), Span::mixed_site());
         let fn_return_type = token_types.get(&rule.token.to_string()).unwrap();
         let fn_return_variant = Ident::new(&format!("{}", rule.token), Span::mixed_site());
         let closure_ident = Ident::new(&format!("prod_{}", i + 1), Span::mixed_site());
         let body = &rule.block.contents;
+
+        let span_ident = Ident::new("span", Span::mixed_site());
         
         let args_decl = rule.expand.iter().filter_map(|(x, ident)| {
             if let Some(arg_ident) = x {
@@ -142,12 +156,12 @@ fn build_rules(token_types: &HashMap<String, &Type>, rules: &[Rule]) -> TokenStr
         });
 
         quote! {
-            fn #fn_ident(#(#args_decl),*) -> Result<#fn_return_type, String> {
+            fn #fn_ident<#src_lifetime>(#span_ident: #span_ty, #(#args_decl),*) -> Result<#fn_return_type, String> {
                 #body
             }
 
-            let #closure_ident = |mut a: Vec<Option<#holder_ident>>|
-                #fn_ident(#(#args_getters),*).map(|x| #holder_ident::#fn_return_variant(x));
+            let #closure_ident = |span: #span_ty, mut a: Vec<Option<#holder_ident>>|
+                #fn_ident(span, #(#args_getters),*).map(|x| #holder_ident::#fn_return_variant(x));
         }
     }).flatten().collect()
 }
@@ -193,15 +207,18 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let expanded = match check(&input) {
         Ok(()) => {
+            let src_lifetime = &input.types_info.src_lifetime;
+            let span_ty = &input.types_info.span_ty;
+
             let pairs = input.terms.iter().chain(input.nterms.iter()).collect::<Vec<_>>();
             let token_types: HashMap<_, _> = pairs.iter()
                 .map(|(ident, ty)| (ident.to_string(), ty)).collect();
-            let rules = build_rules(&token_types, &input.rules);
+            let rules = build_rules(&input.types_info, &token_types, &input.rules);
 
             let body = &input.tokenizer.body.contents;
-            let term_decls = build_decls(&input.terms);
+            let term_decls = build_decls(src_lifetime, &input.terms);
             
-            let holder = build_holder(&pairs);
+            let holder = build_holder(src_lifetime, &pairs);
             let holder_ident = Ident::new("Holder", Span::mixed_site());
 
             let rule_count = input.rules.len() + 1;
@@ -231,8 +248,11 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     
                     #rules
 
-                    let rules: [&dyn Fn(Vec<Option<#holder_ident>>) -> Result<#holder_ident, String>; #rule_count] = [
-                        &|mut a: Vec<Option<#holder_ident>>| Ok(a[0].take().unwrap()),
+                    let rules: [
+                        &dyn Fn(#span_ty, Vec<Option<#holder_ident<#src_lifetime>>>)
+                            -> Result<#holder_ident<#src_lifetime>, String>; #rule_count
+                    ] = [
+                        &|_span: #span_ty, mut a: Vec<Option<#holder_ident<#src_lifetime>>>| Ok(a[0].take().unwrap()),
                         #(&#rule_names),*
                     ];
 
@@ -242,7 +262,7 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                         #on_empty
                     }
 
-                    let pda = build_pda::<#holder_ident>(&terms, &nterms, &prods, #start_token);
+                    let pda = build_pda::<#holder_ident<#src_lifetime>>(&terms, &nterms, &prods, #start_token);
                     let res = pda.parse(
                         &mut tokens_iter,
                         &mut || #on_empty_fn().map(|x| Holder::#start_token_ident(x)),
