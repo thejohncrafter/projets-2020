@@ -1,4 +1,5 @@
 /target
+/parser/test_files
 *.swp
 *.swo
 *.swn
