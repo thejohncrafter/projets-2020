@@ -3,7 +3,6 @@ use std::collections::{BTreeSet, BTreeMap};
 
 use super::types::*;
 use super::items::*;
-use super::pda::*;
 
 pub struct Builder<'a, I> {
     rules: &'a [Production],

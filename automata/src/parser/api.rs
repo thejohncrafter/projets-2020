@@ -3,9 +3,15 @@ use super::types::*;
 use super::builder::Builder;
 #[allow(unused)]
 use super::items::{LR0Item, LR1Item};
-use super::pda::*;
 
-pub fn build_pda<T>(terms: &[&str], nterms: &[&str], prods: &[(&str, Vec<&str>)], start: &str) -> PDA<T> {
+pub fn build_pda_data(
+        terms: &[&str],
+        nterms: &[&str],
+        prods: &[(&str, Vec<&str>)],
+        start: &str
+    )
+    -> (Vec<Production>, MachineTable)
+{
     let term_count = 1 + terms.len();
     let nterm_count = 1 + nterms.len();
 
@@ -46,6 +52,6 @@ pub fn build_pda<T>(terms: &[&str], nterms: &[&str], prods: &[(&str, Vec<&str>)]
     );
 
     let states = builder.build();
-    PDA::new(rules, states)
+    (rules, states)
 }
 

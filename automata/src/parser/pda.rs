@@ -2,9 +2,6 @@
 pub use crate::TokenOrEof;
 use super::types::*;
 
-// Just stores the action/goto table.
-pub type MachineTable = Vec<(Vec<Option<Action>>, Vec<Goto>)>;
-
 #[derive(Debug)]
 pub enum StackItem<T> {
     State(usize),

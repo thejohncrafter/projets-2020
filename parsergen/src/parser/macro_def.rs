@@ -5,6 +5,8 @@ use proc_macro2::{TokenStream, Span};
 use quote::quote;
 use syn::{parse_macro_input, Result, Error, Ident, Type, Lifetime};
 
+use automata::parser::types;
+
 use super::input::*;
 
 fn check_tokens(tokens: &[&Ident]) -> Result<()> {
@@ -170,6 +172,7 @@ struct TableData {
     terms: Vec<String>,
     nterms: Vec<String>,
     prods: Vec<(String, Vec<String>)>,
+    start_token: String,
 }
 
 fn build_table_data(input: &MacroInput) -> TableData {
@@ -181,7 +184,8 @@ fn build_table_data(input: &MacroInput) -> TableData {
                 rule.token.to_string(),
                 rule.expand.iter().map(|(_, ident)| ident.to_string()).collect()
             )
-        }).collect()
+        }).collect(),
+        start_token: input.start_token.to_string(),
     }
 }
 
@@ -189,16 +193,63 @@ fn serialize_table_data(data: &TableData) -> TokenStream {
     let terms = &data.terms;
     let nterms = &data.nterms;
 
-    let prods = data.prods.iter().map(|(token, expand)| {
+    let (rules, states) = automata::parser::build_pda_data(
+            &terms.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+            &nterms.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+            &data.prods.iter().map(|(token, expand)| (
+                token.as_str(),
+                expand.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+            )).collect::<Vec<_>>(),
+            &data.start_token
+        );
+
+    let s_rules = rules.iter().map(|prod| {
+        let s_expand = prod.expand.iter().map(|symbol| {
+            match symbol {
+                types::Symbol::T(i) => quote! {::automata::parser::types::Symbol::T(#i), },
+                types::Symbol::N(i) => quote! {::automata::parser::types::Symbol::N(#i), },
+            }
+        }).flatten().collect::<TokenStream>();
+
+        let symbol = prod.symbol;
         quote! {
-            (#token, vec!(#(#expand),*))
+            ::automata::parser::types::Production {
+                symbol: #symbol,
+                expand: vec!(#s_expand),
+            },
         }
-    }).flatten();
+    }).flatten().collect::<TokenStream>();
+
+    let s_states = states.iter().map(|(actions, gotos)| {
+        let s_actions = actions.iter().map(|action| {
+            match action {
+                Some(types::Action::Shift(i)) =>
+                    quote! {Some(::automata::parser::types::Action::Shift(#i)), },
+                Some(types::Action::Reduce(i)) =>
+                    quote! {Some(::automata::parser::types::Action::Reduce(#i)), },
+                None => quote! {None, }
+            }
+        }).flatten().collect::<TokenStream>();
+
+        let s_gotos = gotos.iter().map(|goto| {
+            match goto {
+                types::Goto::Accept =>
+                    quote! {::automata::parser::types::Goto::Accept, },
+                types::Goto::Some(i) =>
+                    quote! {::automata::parser::types::Goto::Some(#i), },
+                types::Goto::None =>
+                    quote! {::automata::parser::types::Goto::None, }
+            }
+        }).flatten().collect::<TokenStream>();
+
+        quote! {
+            (vec!(#s_actions), vec!(#s_gotos)),
+        }
+    }).flatten().collect::<TokenStream>();
 
     quote! {
-        let terms = vec!(#(#terms),*);
-        let nterms = vec!(#(#nterms),*);
-        let prods = vec!(#(#prods),*);
+        let pda_rules = vec!(#s_rules);
+        let pda_states = vec!(#s_states);
     }
 }
 
@@ -262,7 +313,7 @@ pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                         #on_empty
                     }
 
-                    let pda = build_pda::<#holder_ident<#src_lifetime>>(&terms, &nterms, &prods, #start_token);
+                    let pda: PDA<#holder_ident<#src_lifetime>> = PDA::new(pda_rules, pda_states);
                     let res = pda.parse(
                         &mut tokens_iter,
                         &mut || #on_empty_fn().map(|x| Holder::#start_token_ident(x)),

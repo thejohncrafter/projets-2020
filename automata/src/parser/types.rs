@@ -25,3 +25,6 @@ pub enum Goto {
     None,
 }
 
+// Just stores the action/goto table.
+pub type MachineTable = Vec<(Vec<Option<Action>>, Vec<Goto>)>;
+
