@@ -71,13 +71,14 @@ pub enum UnaryOp {
 
 #[derive(Debug)]
 pub struct Range<'a> {
+    pub span: Span<'a>,
     pub start: Exp<'a>,
     pub end: Exp<'a>,
 }
 
 impl<'a> Range<'a> {
     pub fn new(span: Span<'a>, start: Exp<'a>, end: Exp<'a>) -> Self {
-        Range {start, end}
+        Range {span, start, end}
     }
 }
 
