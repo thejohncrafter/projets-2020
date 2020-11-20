@@ -203,6 +203,7 @@ fn serialize_table_data(data: &TableData) -> TokenStream {
             &data.start_token
         );
 
+    let rules_count = rules.len();
     let s_rules = rules.iter().map(|prod| {
         let s_expand = prod.expand.iter().map(|symbol| {
             match symbol {
@@ -243,13 +244,17 @@ fn serialize_table_data(data: &TableData) -> TokenStream {
         }).flatten().collect::<TokenStream>();
 
         quote! {
-            (vec!(#s_actions), vec!(#s_gotos)),
+            v.push((vec!(#s_actions), vec!(#s_gotos)));
         }
     }).flatten().collect::<TokenStream>();
 
     quote! {
         let pda_rules = vec!(#s_rules);
-        let pda_states = vec!(#s_states);
+        let pda_states = {
+            let mut v = Vec::with_capacity(#rules_count);
+            #s_states
+            v
+        };
     }
 }
 
