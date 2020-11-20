@@ -115,6 +115,10 @@ pub enum ExpVal<'a> {
 
     Block(Block<'a>),
 
+    Mul(i64, String),
+    LMul(i64, Block<'a>),
+    RMul(Exp<'a>, String),
+
     If(Exp<'a>, Block<'a>, Else<'a>),
     For(LocatedIdent<'a>, Range<'a>, Block<'a>),
     While(Exp<'a>, Block<'a>),

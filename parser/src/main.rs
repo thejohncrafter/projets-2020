@@ -144,7 +144,6 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>, Rea
         ($variant:ident) => {Ok(PreToken::Token(Token::Punct(Punct::$variant)))};
     }
 
-    // TODO: Comments
     let mut dfa: DFA<LineIter, IndexedString, PreToken, ReadError> = lex! {
         chars: {chars}
         input: {&input}
@@ -160,8 +159,28 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>, Rea
             parse_i64($text)?
         })))},
         ('"' & (behaved | '\\' & ('\\' | '"' | 'n' | 't'))* & '"') => {
-            // TODO: Remove quotes and handle escape sequences.
-            Ok(PreToken::Token(Token::Str($text.to_string())))
+            let mut v = Vec::new();
+            let mut chars = $text.chars();
+
+            loop {
+                let c = chars.next().unwrap();
+
+                let d = if c == '\\' {
+                    match chars.next().unwrap() {
+                        '\\' => '\\',
+                        '"' => '"',
+                        'n' => '\n',
+                        't' => '\t',
+                        _ => panic!()
+                    }
+                } else if c == '"' {
+                    break
+                } else { c };
+
+                v.push(d);
+            }
+
+            Ok(PreToken::Token(Token::Str(v.into_iter().collect())))
         },
 
         (num & num* & alpha & (alpha | num)*) => {
@@ -687,22 +706,13 @@ fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>, Rea
             (exp_atom -> v:lvalue) => {Ok(Exp::new($span, ExpVal::LValue($v)))},
             
             (exp_atom -> ii:intident) => {
-                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
-                    Exp::new($span, ExpVal::Int($ii.0)),
-                    Exp::new($span, ExpVal::LValue(LValue::new($span, vec!($ii.1))))
-                )))
+                Ok(Exp::new($span, ExpVal::Mul($ii.0, $ii.1)))
             },
             (exp_atom -> l:intlpar b:block_1 RPAR) => {
-                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
-                    Exp::new($span, ExpVal::Int($l)),
-                    Exp::new($span, ExpVal::Block($b))
-                )))
+                Ok(Exp::new($span, ExpVal::LMul($l, $b)))
             },
             (exp_atom -> LPAR e:exp r:rparident) => {
-                Ok(Exp::new($span, ExpVal::BinOp(BinOp::Times,
-                    $e,
-                    Exp::new($span, ExpVal::LValue(LValue::new($span, vec!($r))))
-                )))
+                Ok(Exp::new($span, ExpVal::RMul($e, $r)))
             },
             (exp_atom -> f:identlpar RPAR) => {
                 Ok(Exp::new($span, ExpVal::Call($f, vec!())))

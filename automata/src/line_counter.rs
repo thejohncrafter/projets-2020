@@ -3,27 +3,11 @@ use std::fmt;
 
 use super::lexer::*;
 
-// Just to avoid using too much generics (for lifetimes)
-// in parsers.
-pub struct SimpleSpan {
-    pub start: (usize, usize, usize),
-    pub end: (usize, usize, usize),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Span<'a> {
     pub file: &'a str,
     pub start: (usize, usize, usize),
     pub end: (usize, usize, usize),
-}
-
-impl Span<'_> {
-    pub fn simple(&self) -> SimpleSpan {
-        SimpleSpan {
-            start: self.start,
-            end: self.end,
-        }
-    }
 }
 
 impl fmt::Display for Span<'_> {
@@ -39,19 +23,17 @@ impl fmt::Display for Span<'_> {
 }
 
 struct CountingIter<'a> {
-    chars: std::str::Chars<'a>,
+    chars: std::str::CharIndices<'a>,
     line: usize,
     column: usize,
-    i: usize,
 }
 
 impl<'a> CountingIter<'a> {
     fn new(s: &'a str) -> CountingIter<'a> {
         CountingIter {
-            chars: s.chars(),
+            chars: s.char_indices(),
             line: 1,
             column: 1,
-            i: 0,
         }
     }
 }
@@ -60,8 +42,8 @@ impl Iterator for CountingIter<'_> {
     type Item = (char, (usize, usize, usize));
 
     fn next(&mut self) -> Option<Self::Item> {
-       if let Some(c) = self.chars.next() {
-            let res = (c, (self.i, self.line, self.column));
+       if let Some((i, c)) = self.chars.next() {
+            let res = (c, (i, self.line, self.column));
             
             // Prepare the position of the next character.
             if c == '\n' {
@@ -71,8 +53,6 @@ impl Iterator for CountingIter<'_> {
                 self.column += 1;
             }
             
-            self.i += 1;
-
             Some(res)
        } else {
            None
@@ -129,9 +109,7 @@ impl<'a> IndexedInput<'a> for IndexedString<'a> {
     }
 
     fn slice(&self, span: &Self::Span) -> &'a str {
-        let start_i = self.s.char_indices().nth(span.start.0).unwrap().0;
-        let end_i = self.s.char_indices().nth(span.end.0).unwrap().0;
-        &self.s[start_i ..= end_i]
+        &self.s[span.start.0 ..= span.end.0]
     }
 }
 
