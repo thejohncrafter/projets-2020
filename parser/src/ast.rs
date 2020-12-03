@@ -29,15 +29,16 @@ impl<'a> Param<'a> {
 #[derive(Debug)]
 pub struct LValue<'a> {
     pub span: Span<'a>,
-    // The chain of accesses to the lvalue.
-    pub val: Vec<String>,
+    pub in_exp: Option<Exp<'a>>,
+    pub name: String,
 }
 
 impl<'a> LValue<'a> {
-    pub fn new(span: Span<'a>, val: Vec<String>) -> Self {
+    pub fn new(span: Span<'a>, in_exp: Option<Exp<'a>>, name: String) -> Self {
         LValue {
             span,
-            val: val,
+            in_exp,
+            name,
         }
     }
 }
@@ -143,11 +144,12 @@ impl<'a> Exp<'a> {
 pub struct Block<'a> {
     pub span: Span<'a>,
     pub val: Vec<Exp<'a>>,
+    pub trailing_semicolon: bool,
 }
 
 impl<'a> Block<'a> {
-    pub fn new(span: Span<'a>, val: Vec<Exp<'a>>) -> Self {
-        Block {span, val}
+    pub fn new(span: Span<'a>, val: Vec<Exp<'a>>, trailing_semicolon: bool) -> Self {
+        Block {span, val, trailing_semicolon}
     }
 }
 

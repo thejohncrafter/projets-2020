@@ -12,13 +12,34 @@ pub struct Span<'a> {
 
 impl fmt::Display for Span<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}:{{{}:{}-{}:{}}}",
-            self.file,
-            self.start.1, self.start.2,
-            self.end.1, self.end.2,
-        )
+        if self.start.1 == self.end.1 {
+            if self.start.2 == self.end.2 {
+                write!(
+                    f,
+                    "File {}, line {}, character {}:",
+                    self.file,
+                    self.start.1,
+                    self.start.2,
+                )
+            } else {
+                write!(
+                    f,
+                    "File {}, line {}, characters {}-{}:",
+                    self.file,
+                    self.start.1,
+                    self.start.2,
+                    self.end.2,
+                )
+            }
+        } else {
+            write!(
+                f,
+                "File {}, line {}, character {} to line {}, character {}:",
+                self.file,
+                self.start.1, self.start.2,
+                self.end.1, self.end.2,
+            )
+        }
     }
 }
 

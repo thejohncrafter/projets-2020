@@ -20,7 +20,7 @@ impl<'a> From<(Span<'a>, String)> for ReadError<'a> {
 
 impl fmt::Display for ReadError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.span, self.message)
+        write!(f, "{}\n{}", self.span, self.message)
     }
 }
 

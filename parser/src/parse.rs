@@ -576,7 +576,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                 Ok(($h.0, $h.1, Some($ty)))
             },
             (function -> s:function_signature END) => {
-                Ok(Function::new($span, $s.0, $s.1, $s.2, Block::new($span, vec!())))
+                Ok(Function::new($span, $s.0, $s.1, $s.2, Block::new($span, vec!(), false)))
             },
             (function -> s:function_signature b:block_2 END) => {
                 Ok(Function::new($span, $s.0, $s.1, $s.2, $b))
@@ -729,7 +729,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             },
 
             (exp -> IF cond:exp e:else_block) => {
-                Ok(Exp::new($span, ExpVal::If($cond, Block::new($span, vec!()), $e)))
+                Ok(Exp::new($span, ExpVal::If($cond, Block::new($span, vec!(), false), $e)))
             },
             (exp -> IF cond:exp b:clean_block_0 e:else_block) => {
                 Ok(Exp::new($span, ExpVal::If($cond, $b, $e)))
@@ -737,76 +737,74 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
 
             (else_block -> END) => {Ok(Else::new($span, ElseVal::End))},
             (else_block -> ELSE END) => {
-                Ok(Else::new($span, ElseVal::Else(Block::new($span, vec!()))))
+                Ok(Else::new($span, ElseVal::Else(Block::new($span, vec!(), false))))
             },
             (else_block -> ELSE b:block_0 END) => {
                 Ok(Else::new($span, ElseVal::Else($b)))
             },
             (else_block -> ELSEIF cond:exp e:else_block) => {
-                Ok(Else::new($span, ElseVal::ElseIf($cond, Block::new($span, vec!()), $e)))
+                Ok(Else::new($span, ElseVal::ElseIf($cond, Block::new($span, vec!(), false), $e)))
             },
             (else_block -> ELSEIF cond:exp b:clean_block_0 e:else_block) => {
                 Ok(Else::new($span, ElseVal::ElseIf($cond, $b, $e)))
             },
 
             (exp -> FOR id:located_ident EQU range:range END) => {
-                Ok(Exp::new($span, ExpVal::For($id, $range, Block::new($span, vec!()))))
+                Ok(Exp::new($span, ExpVal::For($id, $range, Block::new($span, vec!(), false))))
             },
             (exp -> FOR id:located_ident EQU range:range b:clean_block_0 END) => {
                 Ok(Exp::new($span, ExpVal::For($id, $range, $b)))
             },
 
             (exp -> WHILE cond:exp END) => {
-                Ok(Exp::new($span, ExpVal::While($cond, Block::new($span, vec!()))))
+                Ok(Exp::new($span, ExpVal::While($cond, Block::new($span, vec!(), false))))
             },
             (exp -> WHILE cond:exp b:clean_block_0 END) => {
                 Ok(Exp::new($span, ExpVal::While($cond, $b)))
             },
 
-            (lvalue -> l:lvalue DOT r:ident) => {
-                let mut v = $l.val;
-                v.push($r);
-                Ok(LValue::new($span, v))
+            (lvalue -> e:exp_atom DOT name:ident) => {
+                Ok(LValue::new($span, Some($e), $name))
             },
-            (lvalue -> id:ident) => {
-                Ok(LValue::new($span, vec!($id)))
+            (lvalue -> name:ident) => {
+                Ok(LValue::new($span, None, $name))
             },
             
-            (block_0 -> e:exp) => {Ok(Block::new($span, vec!($e)))},
-            (block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
-            (block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e)))},
+            (block_0 -> e:exp) => {Ok(Block::new($span, vec!($e), false))},
+            (block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!(), true))},
+            (block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e), false))},
             (block_0 -> b:block_0 SEMICOLON) => {Ok($b)},
             (block_0 -> b:block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
                 v.push($e);
-                Ok(Block::new($span, v))
+                Ok(Block::new($span, v, false))
             },
-            (clean_block_0 -> e:clean_exp) => {Ok(Block::new($span, vec!($e)))},
-            (clean_block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
-            (clean_block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e)))},
-            (clean_block_0 -> b:clean_block_0 SEMICOLON) => {Ok($b)},
+            (clean_block_0 -> e:clean_exp) => {Ok(Block::new($span, vec!($e), false))},
+            (clean_block_0 -> SEMICOLON) => {Ok(Block::new($span, vec!(), true))},
+            (clean_block_0 -> SEMICOLON e:exp) => {Ok(Block::new($span, vec!($e), false))},
+            (clean_block_0 -> b:clean_block_0 SEMICOLON) => {Ok(Block::new($span, $b.val, true))},
             (clean_block_0 -> b:clean_block_0 SEMICOLON e:exp) => {
                 let mut v = $b.val;
                 v.push($e);
-                Ok(Block::new($span, v))
+                Ok(Block::new($span, v, true))
             },
-            (block_1 -> e:exp) => {Ok(Block::new($span, vec!($e)))},
+            (block_1 -> e:exp) => {Ok(Block::new($span, vec!($e), false))},
             (block_1 -> e:exp b:block_2) => {
                 let mut v = $b.val;
                 v.insert(0, $e);
-                Ok(Block::new($span, v))
+                Ok(Block::new($span, v, $b.trailing_semicolon))
             },
-            (block_2 -> SEMICOLON) => {Ok(Block::new($span, vec!()))},
+            (block_2 -> SEMICOLON) => {Ok(Block::new($span, vec!(), true))},
             (block_2 -> SEMICOLON b:block_2) => {
-                Ok(Block::new($span, $b.val))
+                Ok(Block::new($span, $b.val, $b.trailing_semicolon))
             },
             (block_2 -> SEMICOLON e:exp) => {
-                Ok(Block::new($span, vec!($e)))
+                Ok(Block::new($span, vec!($e), false))
             },
             (block_2 -> SEMICOLON e:exp b:block_2) => {
                 let mut v = $b.val;
                 v.insert(0, $e);
-                Ok(Block::new($span, v))
+                Ok(Block::new($span, v, false))
             },
         }
 

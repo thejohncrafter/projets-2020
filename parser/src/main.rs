@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 
 use parse::parse;
 
@@ -114,26 +114,41 @@ fn main() -> Result<(), String> {
     let matches = App::new("petit-julia")
         .version("1.0")
         .author("Julien Marquet")
-        .subcommand(SubCommand::with_name("run")
-            .about("Runs the given program")
-            .arg(Arg::with_name("input")
-                .help("The program to run")
-                .required(true)
-                .index(1)))
-        .subcommand(SubCommand::with_name("test")
-            .about("Runs all the tests")
-            .arg(Arg::with_name("input")
-                .help("The directory that contains the tests")
-                .required(true)
-                .index(1)))
+        .arg(Arg::with_name("input")
+            .help("The program to run")
+            .required(true)
+            .index(1))
+        .arg(Arg::with_name("test")
+            .long("test")
+            .help("Runs all the tests in the given directory, overrides the default behavior"))
+        .arg(Arg::with_name("parse-only")
+            .long("parse-only")
+            .help("Only parse the input"))
+        .arg(Arg::with_name("type-only")
+            .long("type-only")
+            .help("Only types the input"))
         .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("run") {
+    if !matches.is_present("test") {
         let file_name = matches.value_of("input").unwrap();
-        run(file_name)?;
-    } else if let Some(matches) = matches.subcommand_matches("test") {
+        let _parse_only = matches.is_present("parse_only");
+        let _type_only = matches.is_present("type_only");
+
+        let res = run(file_name);
+
+        match res {
+            Ok(()) => (),
+            Err(e) => println!("{}", e)
+        }
+    } else {
         let dir_name = matches.value_of("input").unwrap();
-        test(dir_name)?;
+        
+        let res = test(dir_name);
+        
+        match res {
+            Ok(()) => (),
+            Err(e) => println!("{}", e)
+        }
     }
 
     Ok(())
