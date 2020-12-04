@@ -110,7 +110,7 @@ fn test(dir_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn main() -> Result<(), String> {
+fn main() {
     let matches = App::new("petit-julia")
         .version("1.0")
         .author("Julien Marquet")
@@ -129,7 +129,7 @@ fn main() -> Result<(), String> {
             .help("Only types the input"))
         .get_matches();
 
-    if !matches.is_present("test") {
+    let success = if !matches.is_present("test") {
         let file_name = matches.value_of("input").unwrap();
         let _parse_only = matches.is_present("parse_only");
         let _type_only = matches.is_present("type_only");
@@ -137,8 +137,11 @@ fn main() -> Result<(), String> {
         let res = run(file_name);
 
         match res {
-            Ok(()) => (),
-            Err(e) => println!("{}", e)
+            Ok(()) => true,
+            Err(e) => {
+                println!("{}", e);
+                false
+            }
         }
     } else {
         let dir_name = matches.value_of("input").unwrap();
@@ -146,11 +149,14 @@ fn main() -> Result<(), String> {
         let res = test(dir_name);
         
         match res {
-            Ok(()) => (),
-            Err(e) => println!("{}", e)
+            Ok(()) => true,
+            Err(e) => {
+                println!("{}", e);
+                false
+            }
         }
-    }
+    };
 
-    Ok(())
+    std::process::exit(if success {0} else {1});
 }
 
