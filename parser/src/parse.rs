@@ -578,7 +578,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             (function -> s:function_signature END) => {
                 Ok(Function::new($span, $s.0, $s.1, $s.2, Block::new($span, vec!(), false)))
             },
-            (function -> s:function_signature b:block_2 END) => {
+            (function -> s:function_signature b:block_0 END) => {
                 Ok(Function::new($span, $s.0, $s.1, $s.2, $b))
             },
 
