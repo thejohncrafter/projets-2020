@@ -125,10 +125,21 @@ pub enum ExpVal<'a> {
     While(Exp<'a>, Block<'a>),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum StaticType {
+    Any,
+    Nothing,
+    Int64,
+    Bool,
+    Str,
+    Struct(String)
+}
+
 #[derive(Debug)]
 pub struct Exp<'a> {
     pub span: Span<'a>,
     pub val: Box<ExpVal<'a>>,
+    pub static_ty: Option<StaticType> // It should be populated as part of the static typing phase. If a type is unknown, then it must be Any.
 }
 
 impl<'a> Exp<'a> {
@@ -136,6 +147,7 @@ impl<'a> Exp<'a> {
         Exp {
             span,
             val: Box::new(val),
+            static_ty: None
         }
     }
 }
