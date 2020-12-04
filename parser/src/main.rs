@@ -1,6 +1,7 @@
 
 mod ast;
 mod parse;
+mod typing;
 
 use std::fs;
 use std::fs::File;
@@ -10,8 +11,9 @@ use std::path::Path;
 use clap::{Arg, App};
 
 use parse::parse;
+use typing::static_type;
 
-fn run(file_name: &str) -> Result<(), String> {
+fn run(file_name: &str, parse_only: bool, type_only: bool) -> Result<(), String> {
     let path = Path::new(file_name);
     let display = path.display();
 
@@ -22,8 +24,13 @@ fn run(file_name: &str) -> Result<(), String> {
     
     let mut s = String::new();
     file.read_to_string(&mut s).map_err(|e| e.to_string())?;
-   
-    let ast = parse(file_name, &s).map_err(|e| e.to_string())?;
+
+    println!("Parsing...");
+    let mut ast = parse(file_name, &s).map_err(|e| e.to_string())?;
+    if !parse_only {
+        println!("Typing...");
+        ast = static_type(ast).map_err(|e| e.to_string())?;
+    }
 
     println!("{:?}", ast);
 
@@ -134,7 +141,7 @@ fn main() {
         let _parse_only = matches.is_present("parse_only");
         let _type_only = matches.is_present("type_only");
 
-        let res = run(file_name);
+        let res = run(file_name, _parse_only, _type_only);
 
         match res {
             Ok(()) => true,
