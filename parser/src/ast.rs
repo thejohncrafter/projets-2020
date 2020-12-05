@@ -1,4 +1,4 @@
-
+use std::fmt;
 use automata::line_counter::Span;
 
 #[derive(Debug)]
@@ -125,7 +125,7 @@ pub enum ExpVal<'a> {
     While(Exp<'a>, Block<'a>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum StaticType {
     Any,
     Nothing,
@@ -133,6 +133,19 @@ pub enum StaticType {
     Bool,
     Str,
     Struct(String)
+}
+
+impl fmt::Display for StaticType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            StaticType::Any => write!(f, "Any"),
+            StaticType::Nothing => write!(f, "Nothing"),
+            StaticType::Int64 => write!(f, "Int64"),
+            StaticType::Bool => write!(f, "Bool"),
+            StaticType::Str => write!(f, "String"),
+            StaticType::Struct(s) => write!(f, "Structure '{}'", s)
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -11,7 +11,7 @@ use std::path::Path;
 use clap::{Arg, App};
 
 use parse::parse;
-use typing::static_type;
+use typing::main::static_type;
 
 fn run(file_name: &str, parse_only: bool, type_only: bool) -> Result<(), String> {
     let path = Path::new(file_name);
@@ -25,14 +25,14 @@ fn run(file_name: &str, parse_only: bool, type_only: bool) -> Result<(), String>
     let mut s = String::new();
     file.read_to_string(&mut s).map_err(|e| e.to_string())?;
 
-    println!("Parsing...");
-    let mut ast = parse(file_name, &s).map_err(|e| e.to_string())?;
+    let ast = parse(file_name, &s).map_err(|e| e.to_string())?;
     if !parse_only {
-        println!("Typing...");
-        ast = static_type(ast).map_err(|e| e.to_string())?;
-    }
+        let typed_decls = static_type(ast).map_err(|e| e.to_string())?;
 
-    println!("{:?}", ast);
+        println!("{:?}", typed_decls);
+    } else {
+        println!("{:?}", ast);
+    }
 
     Ok(())
 }
