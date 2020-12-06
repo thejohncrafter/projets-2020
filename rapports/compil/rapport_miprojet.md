@@ -199,7 +199,7 @@ Cette approche est relativement insatisfaisante car on se trimbale beaucoup trop
 
 Beaucoup de code passe son temps à unwrapper des types options et à travailler sur eux ou à effectuer des hypothèses.
 
-En l'occurrence, tout le code actuel ne permet que de façon très inexact de traquer les portées, ce qui est la raison pourquoi le test sur la ré-assignation de `nothing` dans la portée globale échoue, il était possible de hacker dans le code un cas particulier sur cette variable, mais cela rajouterait de la complexité inutile pour un code qui sera de toute façon refactorisé en profondeur.
+En l'occurrence, tout le code actuel ne permet que de façon très inexacte de traquer les portées, ce qui est la raison pour laquelle le test sur la ré-assignation de `nothing` dans la portée globale échoue, il était possible de hacker dans le code un cas particulier sur cette variable, mais cela rajouterait de la complexité inutile pour un code qui sera de toute façon refactorisé en profondeur.
 
 À noter qu'une bonne chose dans ce module est qu'une attention a été portée à déplacer toujours autant que possible les données, plutôt que de les copier (les copies sont essentiellement pour des chaînes de caractères idéalement petites). Et que tout est fait de façon mutable.
 
@@ -217,6 +217,41 @@ Une refactorisation prendrait la forme suivante :
 - Améliorer et harmoniser les erreurs avec des span plus précis sur certains endroits et des messages plus clairs sur d'autres ;
 
 ## Futurs travaux
+
+### Ce qui n'a pas été fait
+
+#### Analyse syntaxique
+
+```
+Test de ../../target/debug/parser
+
+Partie 1
+mauvais .................
+bons ..............................................................................................
+ECHEC sur exec/int64.jl (devrait reussir)
+..............................
+Partie 1: 140/141 : 99%
+```
+
+Nous ne gérons pas le cas de l'entier 64 bits, car nous n'avions pas compris l'ensemble des valeurs acceptés comme fermé, nous pensions donc que $2^{63}$ était exclu.
+
+#### Analyse sémantique
+
+```
+Test de ../../target/debug/parser
+
+
+Partie 2
+mauvais ..................
+ECHEC sur typing/bad/testfile-nothing-1.jl (devrait échouer)
+...........
+bons ..............................
+ECHEC sur exec/int64.jl (devrait reussir)
+..............................
+Partie 2: 87/89 : 97%
+```
+
+Comme indiqué, précédemment, le test sur `nothing` sera fixé dans la refactorisation.
 
 ### Les tests
 
