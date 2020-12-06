@@ -422,6 +422,10 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             exp_powers: Exp<'a>,
             exp_atom: Exp<'a>,
 
+            // A condition followed by a block.
+            // Needed to disambiguate things like "if return 1 [...] end".
+            cond_and_block: (Exp<'a>, Block<'a>),
+
             lvalue: LValue<'a>,
 
             else_block: Else<'a>,
@@ -519,9 +523,6 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
         }
 
         rules: {
-            // We can't accept an empty file from this grammar.
-            // Empty files will be handled manually.
-            // TODO: handle empty files
             (file -> d:decl) => {Ok(vec!($d))},
             (file -> f:file d:decl) => {
                 let mut v = $f;
@@ -582,7 +583,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                 Ok(Function::new($span, $s.0, $s.1, $s.2, $b))
             },
 
-            (range -> low:exp COLON high:exp) => {Ok(Range::new($span, $low, $high))},
+            (range -> low:exp COLON high:exp_assign) => {Ok(Range::new($span, $low, $high))},
 
             (comparison_op -> DOUBLEEQU) => {Ok(BinOp::Equ)},
             (comparison_op -> NEQ) => {Ok(BinOp::Neq)},
@@ -600,16 +601,22 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             (exp -> e:exp_return) => {Ok($e)},
             (clean_exp -> e:exp_clean_return) => {Ok($e)},
 
+            (exp_return -> RETURN) => {
+                Ok(Exp::new($span, ExpVal::Return(None)))
+            },
             (exp_return -> RETURN e:exp_assign) => {
-                Ok(Exp::new($span, ExpVal::Return($e)))
+                Ok(Exp::new($span, ExpVal::Return(Some($e))))
             },
             (exp_return -> e:exp_assign) => {Ok($e)},
+            (exp_clean_return -> RETURN) => {
+                Ok(Exp::new($span, ExpVal::Return(None)))
+            },
             (exp_clean_return -> RETURN e:exp_assign) => {
-                Ok(Exp::new($span, ExpVal::Return($e)))
+                Ok(Exp::new($span, ExpVal::Return(Some($e))))
             },
             (exp_clean_return -> e:exp_clean_assign) => {Ok($e)},
 
-            (exp_assign -> l:lvalue EQU r:exp_disjunctions) => {
+            (exp_assign -> l:lvalue EQU r:exp_assign) => {
                 Ok(Exp::new($span, ExpVal::Assign($l, $r)))
             },
             (exp_assign -> e:exp_disjunctions) => {Ok($e)},
@@ -716,6 +723,16 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                 Ok(Exp::new($span, ExpVal::Block($b)))
             },
 
+            (cond_and_block -> e:exp_assign) => {
+                Ok(($e, Block::new($span, vec!(), false)))
+            },
+            (cond_and_block -> e:exp_assign b:clean_block_0) => {
+                Ok(($e, $b))
+            },
+            (cond_and_block -> RETURN e:exp_assign b:clean_block_0) => {
+                Ok(($e, $b))
+            },
+
             (call_args -> e:exp) => {
                 Ok(vec!($e))
             },
@@ -728,11 +745,8 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                 Ok(v)
             },
 
-            (exp -> IF cond:exp e:else_block) => {
-                Ok(Exp::new($span, ExpVal::If($cond, Block::new($span, vec!(), false), $e)))
-            },
-            (exp -> IF cond:exp b:clean_block_0 e:else_block) => {
-                Ok(Exp::new($span, ExpVal::If($cond, $b, $e)))
+            (exp -> IF cond_b:cond_and_block e:else_block) => {
+                Ok(Exp::new($span, ExpVal::If($cond_b.0, $cond_b.1, $e)))
             },
 
             (else_block -> END) => {Ok(Else::new($span, ElseVal::End))},
@@ -742,11 +756,8 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             (else_block -> ELSE b:block_0 END) => {
                 Ok(Else::new($span, ElseVal::Else($b)))
             },
-            (else_block -> ELSEIF cond:exp e:else_block) => {
-                Ok(Else::new($span, ElseVal::ElseIf($cond, Block::new($span, vec!(), false), $e)))
-            },
-            (else_block -> ELSEIF cond:exp b:clean_block_0 e:else_block) => {
-                Ok(Else::new($span, ElseVal::ElseIf($cond, $b, $e)))
+            (else_block -> ELSEIF cond_b:cond_and_block e:else_block) => {
+                Ok(Else::new($span, ElseVal::ElseIf($cond_b.0, $cond_b.1, $e)))
             },
 
             (exp -> FOR id:located_ident EQU range:range END) => {
@@ -756,11 +767,8 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                 Ok(Exp::new($span, ExpVal::For($id, $range, $b)))
             },
 
-            (exp -> WHILE cond:exp END) => {
-                Ok(Exp::new($span, ExpVal::While($cond, Block::new($span, vec!(), false))))
-            },
-            (exp -> WHILE cond:exp b:clean_block_0 END) => {
-                Ok(Exp::new($span, ExpVal::While($cond, $b)))
+            (exp -> WHILE cond_b:cond_and_block END) => {
+                Ok(Exp::new($span, ExpVal::While($cond_b.0, $cond_b.1)))
             },
 
             (lvalue -> e:exp_atom DOT name:ident) => {
