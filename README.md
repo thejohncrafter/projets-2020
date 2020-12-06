@@ -20,5 +20,12 @@ Un lexeur et un parseur sont implémentés avec ce système dans le fichier `sim
 
 ## Systèmes numériques
 
-En l'état actuel, seul le projet de simulateur pour Systèmes Numériques est complet. Il se trouve dans le dossier `sim`.
+Le projet de simulateur pour Systèmes Numériques est complet. Il se trouve dans le dossier `sim`.
+
+## Compilation
+
+La phase 1 du projet de compilation est terminée !
+
+Comme on veut rendre une archive "propre" pour le projet de Compilation, on se donne un petit
+script (`compil/build_compil_bundle.sh`) qui génère les fichiers nécessaires.
 

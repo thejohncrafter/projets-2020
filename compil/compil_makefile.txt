@@ -1,0 +1,12 @@
+
+.PHONY: all clean
+
+all:
+	cargo build --release -p parser
+	mv ./target/release/parser ./pjuliac
+
+clean:
+	cargo clean
+	rm pjuliac
+	rm Cargo.lock
+
