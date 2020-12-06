@@ -11,16 +11,62 @@ pub fn is_compatible(alpha: Option<&StaticType>, beta: Option<&StaticType>) -> b
     }
 }
 
+pub fn compatibility_value(alpha: Option<&StaticType>, beta: Option<&StaticType>) -> i32 {
+    match (alpha, beta) {
+        (None, None) => 1,
+        (None, _) | (_, None) => 0,
+        (Some(a), Some(b)) => {
+            if *a == *b {
+                1
+            } else if *a == StaticType::Any {
+                0
+            } else if *b == StaticType::Any {
+                0
+            } else {
+                -1
+            }
+        }
+    }
+}
+
 pub type ReturnVerification<'a> = Result<(), ReadError<'a>>;
 pub type FuncSignature = (Option<StaticType>, Vec<Option<StaticType>>);
 
-// Test if a certain function declaration match another signature.
-// Useful for ambiguity and duplication detection.
-pub fn is_callable_with(f: &Function, target_sig: &FuncSignature) -> bool {
-    f.params
+pub fn is_this_call_ambiguous(args: Vec<Option<&StaticType>>, functions: &Vec<FuncSignature>) -> bool {
+    // Functions cannot be empty.
+    let weights: Vec<i32> = functions.iter()
+        .filter(|sig| is_callable_with(&args, sig))
+        .map(|sig| compute_selectivity_weight(&args, sig))
+        .collect();
+    let optimal_call_weight = weights.iter().max().unwrap();
+
+    println!("Ambiguous detection, here's the weights: {:?}", weights);
+
+    optimal_call_weight > &0 && weights.iter().filter(|w| w == &optimal_call_weight).count() > 1
+}
+
+pub fn compute_selectivity_weight(params: &Vec<Option<&StaticType>>, target_sig: &FuncSignature) -> i32 {
+    params
         .iter()
         .zip(target_sig.1.iter())
-        .all(|(param, target_type)| is_compatible(convert_to_static_type(param.ty.as_ref()).as_ref(), target_type.as_ref()))
+        .map(|(param_ty, target_ty)| compatibility_value(*param_ty, target_ty.as_ref()))
+        .sum()
+}
+
+// Test if a certain set of StaticType match another signature.
+// Useful for ambiguity and duplication detection.
+pub fn is_callable_with(params: &Vec<Option<&StaticType>>, target_sig: &FuncSignature) -> bool {
+    params
+        .into_iter()
+        .zip(target_sig.1.iter())
+        .all(|(param_ty, target_type)| is_compatible(*param_ty, target_type.as_ref()))
+}
+
+pub fn is_callable_with_exactly(params: Vec<Option<StaticType>>, target_sig: &FuncSignature) -> bool {
+    params
+        .iter()
+        .zip(target_sig.1.iter())
+        .all(|(param_ty, target_type)| compatibility_value(param_ty.as_ref(), target_type.as_ref()) == 1)
 }
 
 pub fn build_signature(f: &Function) -> FuncSignature {
@@ -92,7 +138,10 @@ pub fn collect_all_assign<'a>(e: &Exp<'a>) -> Vec<String> {
 
     // Perform a DFS on e to smoke out all Assign
     match e.val.as_ref() {
-        ExpVal::Return(e) => collect_all_assign(&e),
+        ExpVal::Return(e) => match e {
+            None => vec![],
+            Some(e) => collect_all_assign(&e)
+        },
         ExpVal::Assign(lv, e) => {
             let mut assigns = collect_all_assign(&e);
             match lv.in_exp {
@@ -114,11 +163,7 @@ pub fn collect_all_assign<'a>(e: &Exp<'a>) -> Vec<String> {
             .chain(collect_all_assign_in_array(&b.val).into_iter())
             .chain(collect_else(&else_branch).into_iter())
             .collect(),
-        ExpVal::For(_lident, _range, b) => collect_all_assign_in_array(&b.val),
-        ExpVal::While(e, b) => collect_all_assign(&e)
-            .into_iter()
-            .chain(collect_all_assign_in_array(&b.val).into_iter())
-            .collect(),
+        ExpVal::For(_, _, _) | ExpVal::While(_, _) => vec![], 
         ExpVal::Int(_) | ExpVal::Str(_) | ExpVal::Bool(_) | ExpVal::Mul(_, _) => vec![],
         ExpVal::LValue(lv) => {
             match &lv.in_exp {

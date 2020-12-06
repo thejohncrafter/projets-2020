@@ -1,10 +1,17 @@
 use super::data::*;
 use crate::ast::*;
+use automata::line_counter::Span;
 
-fn verify_return_type<'a>(found: &Exp<'a>, expected: &StaticType) -> ReturnVerification<'a> {
-    if !is_compatible(found.static_ty.as_ref(), Some(expected)) {
+fn verify_return_type<'a>(span: Span<'a>, found: Option<&Exp<'a>>, expected: &StaticType) -> ReturnVerification<'a> {
+    if found.is_none() && expected != &StaticType::Any && expected != &StaticType::Nothing {
+        return Err(
+            (span, format!("Mismatching return types, found nothing, expected: '{}'", expected).to_string()).into()
+        );
+    }
+
+    if !is_compatible(found.unwrap().static_ty.as_ref(), Some(expected)) {
         Err(
-            (found.span, format!("Mismatching return types, found: '{:?}', expected: '{}'", found.static_ty, expected).to_string()).into()
+            (found.unwrap().span, format!("Mismatching return types, found: '{:?}', expected: '{}'", found.unwrap().static_ty, expected).to_string()).into()
         )
     } else {
         Ok(())
@@ -34,7 +41,7 @@ fn visit_returns<'a>(e: &Exp<'a>, expected: &StaticType) -> ReturnVerification<'
     }
 
     match e.val.as_ref() {
-        ExpVal::Return(e) => verify_return_type(e, expected),
+        ExpVal::Return(r) => verify_return_type(e.span, r.as_ref(), expected),
         ExpVal::Assign(_, e) => visit_returns(e, expected),
         ExpVal::BinOp(_, a, b) => {
             visit_returns(&a, expected)?;

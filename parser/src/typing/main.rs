@@ -1,3 +1,5 @@
+
+
 use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::ast::*;
@@ -112,9 +114,9 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                 // either ambiguously (None, Int64 vs Int64, None) or exact match.
 
                 for sig in function_sigs.entry(f.name.clone()).or_default() {
-                    if is_callable_with(&f, &sig) {
+                    if is_callable_with_exactly(f.params.iter().map(|arg| convert_to_static_type(arg.ty.as_ref())).collect(), &sig) {
                         return Err(
-                            (f.span, "This function is already defined or has ambiguous types which cannot be resolved at runtime".to_string()).into()
+                            (f.span, "This function is already defined or the types are too ambiguous".to_string()).into()
                         );
                     }
                 }
@@ -170,7 +172,7 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
             let extra_local_vars = collect_all_assign_in_array(&func.body.val);
             for var in &extra_local_vars {
                 // No need to pollute and get inferior types.
-                if !global_ctx.environment.contains_key(var) {
+                if !global_ctx.environment.contains_key(var) || var == "nothing" {
                     global_ctx.environment
                         .entry(var.clone())
                         .or_default()
@@ -196,10 +198,21 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
 
             for arg in &func.params {
                 global_ctx.environment.get_mut(&arg.name.name).unwrap().pop();
+                if global_ctx.environment.entry(arg.name.name.clone()).or_default().is_empty() {
+                    global_ctx.environment.remove(&arg.name.name);
+                }
             }
 
             for var in extra_local_vars {
-                global_ctx.environment.get_mut(&var).unwrap().pop();
+                if let Some(v) = global_ctx.environment.get_mut(&var) {
+                    v.pop();
+                } else {
+                    println!("WARNING: '{}' was already deleted!", &var);
+                }
+
+                if global_ctx.environment.entry(var.clone()).or_default().is_empty() {
+                    global_ctx.environment.remove(&var);
+                }
             }
         }
     }

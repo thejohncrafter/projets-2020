@@ -104,8 +104,10 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
 
     fn fill_types<'a>(expr: &mut Exp<'a>, ctx: &mut TypingContext<'a>) -> ExprTypingResult<'a> {
         match expr.val.as_mut() {
-            ExpVal::Return(e) => {
-                fill_types(e, ctx)?;
+            ExpVal::Return(m_e) => {
+                if let Some(e) = m_e {
+                    fill_types(e, ctx)?;
+                }
                 expr.static_ty = Some(StaticType::Any);
             },
             ExpVal::Assign(lv, e) => {
@@ -121,9 +123,11 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
 
                         if !is_compatible(ctx.environment[&lv.name].last().and_then(|t| t.as_ref()),
                             e.static_ty.as_ref()) {
-                            return Err(
-                                (e.span, format!("This expression has type '{:?}' but is incompatible with '{:?}' (expected)", e.static_ty, ctx.environment[&lv.name].last().unwrap()).to_string()).into()
-                            );
+                            // FIXME(Ryan): improve scoping system drastically. this is definitely
+                            // not an acceptable way to proceed.
+                            //return Err(
+                            //    (e.span, format!("This expression has type '{:?}' but is incompatible with '{:?}' (expected)", e.static_ty, ctx.environment[&lv.name].last().unwrap()).to_string()).into()
+                            //);
                         }
 
                         // Only replace the type if it improves it.
@@ -301,6 +305,15 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
                         if let Some(ty) = get_unique_function_ret_type(&name, ctx) {
                             expr.static_ty = Some(ty);
                         } else {
+                            // Ambiguity detection for functions.
+                            if ctx.functions.contains_key(name) && is_this_call_ambiguous(args.iter().map(|arg| arg.static_ty.as_ref()).collect(), &ctx.functions[name]) {
+                                    return Err(
+                                        (expr.span, format!("Ambiguous call to function '{}', cannot be resolve at runtime through dynamic dispatch", &name).to_string()).into()
+                                    );
+                            }
+
+
+
                             expr.static_ty = Some(StaticType::Any);
                         }
                     }
@@ -325,9 +338,19 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
                     Some(e) => {
                         fill_types(e, ctx)?;
 
-                        // FIXME(Ryan): we should be able to check if e.static_ty is actually a
-                        // structure and check whether lv.name is indeed a field of e.static_ty
-                        // structure.
+                        if let Some(st) = &e.static_ty {
+                            if !field_exist_in(st, &lv.name, ctx) {
+                                return Err(
+                                    (lv.span, format!("No field named '{}' in type '{}'", &lv.name, st).to_string()).into()
+                                );
+                            }
+                        }
+
+                        if !ctx.all_fields.contains_key(&lv.name) {
+                            return Err(
+                                (lv.span, format!("No field named '{}' in any structure", &lv.name).to_string()).into()
+                            );
+                        }
 
                         expr.static_ty = ctx.all_fields[&lv.name].clone();
                     }
@@ -391,6 +414,9 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
 
                 for var in local_extra_vars {
                     ctx.environment.get_mut(&var).unwrap().pop();
+                    if ctx.environment[&var].is_empty() {
+                        ctx.environment.remove(&var);
+                    }
                 }
             },
             ExpVal::While(e, block) => {
@@ -414,6 +440,9 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
                     for var in local_extra_vars {
                         if !out_of_scope_vars.contains(&var) {
                             ctx.environment.get_mut(&var).unwrap().pop();
+                            if ctx.environment[&var].is_empty() {
+                                ctx.environment.remove(&var);
+                            }
                         }
                     }
 
