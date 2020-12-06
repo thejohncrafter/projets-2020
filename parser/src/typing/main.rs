@@ -107,6 +107,17 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                     }
                 }
 
+                // Iterate over all signatures to see whether there is already such a signature,
+                // either ambiguously (None, Int64 vs Int64, None) or exact match.
+
+                for sig in function_sigs.entry(f.name.clone()).or_default() {
+                    if is_callable_with(&f, &sig) {
+                        return Err(
+                            (f.span, "This function is already defined or has ambiguous types which cannot be resolved at runtime".to_string()).into()
+                        );
+                    }
+                }
+
                 function_sigs.entry(f.name.clone()).or_default().push(build_signature(&f));
                 functions.entry(f.name.clone()).or_default().push(f);
             },
@@ -117,9 +128,6 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
             }
         }
     }
-
-    println!("Assignations: {:?}", known_variables);
-    println!("---");
 
     // Add nothing: Nothing in the future environment.
     let mut environment = to_env(&known_variables);

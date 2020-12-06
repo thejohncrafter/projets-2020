@@ -25,7 +25,6 @@ fn is_builtin_function(name: &String) -> bool {
 }
 
 fn field_exist_in<'a>(structure_type: &StaticType, field_name: &String, ctx: &'a TypingContext<'a>) -> bool {
-    println!("DEBUG: Checking if field: '{:?}' exist for '{:?}'", structure_type, field_name);
     match structure_type {
         StaticType::Any => true,
         StaticType::Nothing | StaticType::Int64 | StaticType::Str | StaticType::Bool  => false,

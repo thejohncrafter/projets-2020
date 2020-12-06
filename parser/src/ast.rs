@@ -125,7 +125,7 @@ pub enum ExpVal<'a> {
     While(Exp<'a>, Block<'a>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub enum StaticType {
     Any,
     Nothing,

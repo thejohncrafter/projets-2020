@@ -13,6 +13,16 @@ pub fn is_compatible(alpha: Option<&StaticType>, beta: Option<&StaticType>) -> b
 
 pub type ReturnVerification<'a> = Result<(), ReadError<'a>>;
 pub type FuncSignature = (Option<StaticType>, Vec<Option<StaticType>>);
+
+// Test if a certain function declaration match another signature.
+// Useful for ambiguity and duplication detection.
+pub fn is_callable_with(f: &Function, target_sig: &FuncSignature) -> bool {
+    f.params
+        .iter()
+        .zip(target_sig.1.iter())
+        .all(|(param, target_type)| is_compatible(convert_to_static_type(param.ty.as_ref()).as_ref(), target_type.as_ref()))
+}
+
 pub fn build_signature(f: &Function) -> FuncSignature {
     let (ret, mut params): FuncSignature = (
         convert_to_static_type(f.ret_ty.as_ref()), vec![]);
