@@ -1,4 +1,4 @@
-
+use std::fmt;
 use automata::line_counter::Span;
 
 #[derive(Debug)]
@@ -125,10 +125,34 @@ pub enum ExpVal<'a> {
     While(Exp<'a>, Block<'a>),
 }
 
+#[derive(Debug, PartialEq, Clone, Hash)]
+pub enum StaticType {
+    Any,
+    Nothing,
+    Int64,
+    Bool,
+    Str,
+    Struct(String)
+}
+
+impl fmt::Display for StaticType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            StaticType::Any => write!(f, "Any"),
+            StaticType::Nothing => write!(f, "Nothing"),
+            StaticType::Int64 => write!(f, "Int64"),
+            StaticType::Bool => write!(f, "Bool"),
+            StaticType::Str => write!(f, "String"),
+            StaticType::Struct(s) => write!(f, "Structure '{}'", s)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Exp<'a> {
     pub span: Span<'a>,
     pub val: Box<ExpVal<'a>>,
+    pub static_ty: Option<StaticType> // It should be populated as part of the static typing phase. If a type is unknown, then it must be Any.
 }
 
 impl<'a> Exp<'a> {
@@ -136,6 +160,7 @@ impl<'a> Exp<'a> {
         Exp {
             span,
             val: Box::new(val),
+            static_ty: None
         }
     }
 }
@@ -145,11 +170,12 @@ pub struct Block<'a> {
     pub span: Span<'a>,
     pub val: Vec<Exp<'a>>,
     pub trailing_semicolon: bool,
+    pub static_ty: Option<StaticType>
 }
 
 impl<'a> Block<'a> {
     pub fn new(span: Span<'a>, val: Vec<Exp<'a>>, trailing_semicolon: bool) -> Self {
-        Block {span, val, trailing_semicolon}
+        Block {span, val, trailing_semicolon, static_ty: None}
     }
 }
 
