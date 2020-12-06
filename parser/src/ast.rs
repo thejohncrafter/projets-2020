@@ -104,7 +104,7 @@ impl<'a> Else<'a> {
 
 #[derive(Debug)]
 pub enum ExpVal<'a> {
-    Return(Exp<'a>),
+    Return(Option<Exp<'a>>),
     Assign(LValue<'a>, Exp<'a>),
     BinOp(BinOp, Exp<'a>, Exp<'a>),
     UnaryOp(UnaryOp, Exp<'a>),
