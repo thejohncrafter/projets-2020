@@ -261,3 +261,38 @@ Hors des demandes de l'énoncé, il serait intéressant d'ajouter une façon de 
 - Pretty-printing des AST ;
 - Compilation du code obtenu et fuzzing guidé par la couverture
 
+### La grande question sur les Int64, les Définitions, et le Reste
+
+Nous sommes confrontés un problème de nature à la fois formelle, légale et ontologique sur les Int64.
+
+Nous ne passons pas le test "exec/int64.jl" : notre compilateur refuses la chaîne "-9223372036854775808"
+car le nombre "9223372036854775808" n'est pas représentable comme un entier signé sur 64 bits.
+Or on pourrait croire que "-9223372036854775808" représente le nombre `-9223372036854775808`, mais
+en réalité non. En effet, après une analyse minutieuse des consignes, nous avons déduit que ceci :
+
+> Les constantes obéissent aux expressions regulières <entier> et <chaîne> suivantes :
+> [...]
+> <entier> ::= <chiffre>^+
+> [...]
+> Les constantes entières ne doivent pas dépasser 2^63
+
+signifie que "-9223372036854775808" doit être interprété comme "- 9223372036854775808"
+puisque l'expression régulière qui définit les entiers n'accepte pas de signe "-".
+
+Il subsiste un débat sur ce que signifie "ne pas dépasser". Doit-on accpter 2^63 ?
+
+Nous avons déduit que non, et ce pour deux raisons :
+  * 2^63 n'est pas représentable comme entier signé de 64 bits.
+    Il aurait fallu soit représenter les `Int64` sur 128 bits, soit les considérer
+	comme non signés. Les deux solutions auraient été absurdes.
+  * Le mot "dépasser" est sujet à interprétation. Nous choisissons de définir "dépasser"
+    comme "être plus grand que", et "plus grand" est interprété classiquement (en France du
+	moins) comme au sens de l'ordre naturel, c'est à dire que "plus grand" est équivalent
+	à "supérieur ou égal".
+
+	Nous en avons déduit que _2^63 dépasse 2^63_, et donc que l'entier "9223372036854775808"
+	ne doit pas être accepté.
+
+Nous considérons que nous nous conformons bien au sujet, et que le test "exec/int64.jl" est
+en fait erroné.
+
