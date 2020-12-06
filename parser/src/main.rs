@@ -12,7 +12,7 @@ use clap::{Arg, App};
 use parse::parse;
 use typing::main::static_type;
 
-fn run(file_name: &str, parse_only: bool, type_only: bool) -> Result<(), String> {
+fn run(file_name: &str, parse_only: bool, _type_only: bool) -> Result<(), String> {
     let path = Path::new(file_name);
     let display = path.display();
 
@@ -39,7 +39,7 @@ fn run(file_name: &str, parse_only: bool, type_only: bool) -> Result<(), String>
 fn main() {
     let matches = App::new("petit-julia")
         .version("1.0")
-        .author("Julien Marquet")
+        .author("Julien Marquet, Ryan Lahfa")
         .arg(Arg::with_name("input")
             .help("The program to run")
             .required(true)
@@ -54,10 +54,10 @@ fn main() {
 
     let success = {
         let file_name = matches.value_of("input").unwrap();
-        let _parse_only = matches.is_present("parse-only");
-        let _type_only = matches.is_present("type-only");
+        let parse_only = matches.is_present("parse-only");
+        let type_only = matches.is_present("type-only");
 
-        let res = run(file_name, _parse_only, _type_only);
+        let res = run(file_name, parse_only, type_only);
 
         match res {
             Ok(()) => true,
