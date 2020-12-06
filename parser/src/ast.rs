@@ -170,11 +170,12 @@ pub struct Block<'a> {
     pub span: Span<'a>,
     pub val: Vec<Exp<'a>>,
     pub trailing_semicolon: bool,
+    pub static_ty: Option<StaticType>
 }
 
 impl<'a> Block<'a> {
     pub fn new(span: Span<'a>, val: Vec<Exp<'a>>, trailing_semicolon: bool) -> Self {
-        Block {span, val, trailing_semicolon}
+        Block {span, val, trailing_semicolon, static_ty: None}
     }
 }
 

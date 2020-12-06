@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::ast::*;
 use super::data::*;
-use super::expr::type_expression;
+use super::expr::{type_expression, type_block};
+use super::returns::verify_returns;
 
 fn is_well_formed(t: Option<&LocatedIdent>, known_types: &HashSet<String>) -> bool {
     match t {
@@ -18,80 +19,15 @@ fn is_reserved_name(n: &String) -> bool {
     }
 }
 
-fn convert_to_static_type(p: Option<&LocatedIdent>) -> Option<StaticType> {
-    match p {
-        None => None,
-        Some(lident) => {
-            Some(match lident.name.as_str() {
-                "Any" => StaticType::Any,
-                "Nothing" => StaticType::Nothing,
-                "Int64" => StaticType::Int64,
-                "Bool" => StaticType::Bool,
-                "String" => StaticType::Str,
-                _ => StaticType::Struct(lident.name.clone())
-            })
-        }
-    }
-}
-
-fn collect_all_assign<'a>(e: &Exp<'a>) -> Vec<String> {
-    fn collect_else<'a>(u: &Else<'a>) -> Vec<String> {
-        match u.val.as_ref() {
-            ElseVal::End => vec![],
-            ElseVal::Else(b) => collect_array(&b.val),
-            ElseVal::ElseIf(e, b, rest_) => collect_all_assign(&e)
-                .into_iter()
-                .chain(collect_array(&b.val).into_iter())
-                .chain(collect_else(&rest_).into_iter())
-                .collect()
-        }
-    }
-
-    fn collect_array<'a>(a: &Vec<Exp<'a>>) -> Vec<String> {
-        a.iter().flat_map(collect_all_assign).collect()
-    }
-
-    // Perform a DFS on e to smoke out all Assign
-    match e.val.as_ref() {
-        ExpVal::Return(e) => collect_all_assign(&e),
-        ExpVal::Assign(lv, e) => {
-            let mut assigns = collect_all_assign(&e);
-            match lv.in_exp {
-                None => assigns.push(lv.name.clone()),
-                _ => {}
-            };
-            assigns
-        },
-        ExpVal::BinOp(_, alpha, beta) => collect_all_assign(&alpha)
-            .into_iter()
-            .chain(collect_all_assign(&beta).into_iter())
-            .collect(),
-        ExpVal::UnaryOp(_, e) => collect_all_assign(&e),
-        ExpVal::Call(_, e_s) => collect_array(&e_s),
-        ExpVal::Block(b) | ExpVal::LMul(_, b) => collect_array(&b.val),
-        ExpVal::RMul(e, _) => collect_all_assign(&e),
-        ExpVal::If(e, b, else_branch) => collect_all_assign(&e)
-            .into_iter()
-            .chain(collect_array(&b.val).into_iter())
-            .chain(collect_else(&else_branch).into_iter())
-            .collect(),
-        ExpVal::For(_lident, _range, b) => collect_array(&b.val),
-        ExpVal::While(e, b) => collect_all_assign(&e)
-            .into_iter()
-            .chain(collect_array(&b.val).into_iter())
-            .collect(),
-        _ => vec![] // Default case: no assignations can be hidden here.
-    }
-}
-
-fn to_env(known: &HashSet<String>) -> HashMap<String, Option<StaticType>> {
-    known.into_iter().map(|t| (t.clone(), None)).collect()
+fn to_env(known: &HashSet<String>) -> HashMap<String, Vec<Option<StaticType>>> {
+    known.into_iter().map(|t| (t.clone(), vec![None])).collect()
 }
 
 pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
     // Step 1. Build the global environment.
     let mut structures: HashMap<String, Structure> = HashMap::new();
-    let mut functions: HashMap<String, Function> = HashMap::new();
+    let mut functions: HashMap<String, Vec<Function>> = HashMap::new();
+    let mut function_sigs: HashMap<String, Vec<FuncSignature>> = HashMap::new();
     let mut all_fields: HashMap<String, Option<StaticType>> = HashMap::new();
     let mut mutable_fields: HashSet<String> = HashSet::new();
     let mut known_variables: HashSet<String> = HashSet::new();
@@ -151,11 +87,6 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                     );
                 }
                 
-                if functions.contains_key(&f.name) {
-                    return Err((f.span, format!("The ident '{}' is already taken by another function", f.name).to_string()).into());
-                }
-
-
                 if !is_well_formed(f.ret_ty.as_ref(), &known_types) {
                     return Err((f.span, format!("The return type of '{}' is malformed, either it's not a primitive or a declared structure", f.name).to_string()).into());
                 }
@@ -176,7 +107,8 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                     }
                 }
 
-                functions.insert(f.name.clone(), f);
+                function_sigs.entry(f.name.clone()).or_default().push(build_signature(&f));
+                functions.entry(f.name.clone()).or_default().push(f);
             },
             DeclVal::Exp(ge) => {
                 //  If it's a global expression, check all Assign nodes and add them.
@@ -188,29 +120,82 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
 
     println!("Assignations: {:?}", known_variables);
     println!("---");
+
+    // Add nothing: Nothing in the future environment.
+    let mut environment = to_env(&known_variables);
+    environment
+        .entry("nothing".to_string())
+        .or_default()
+        .push(Some(StaticType::Nothing));
+
     // Step 2.
     // Iterate over all declarations.
     // Looks like déjà vu. :>
     let mut global_ctx = TypingContext {
-        functions,
+        functions: function_sigs,
         structures,
         known_types,
         mutable_fields,
         all_fields,
-        environment: to_env(&known_variables)
+        environment
     };
-        //  If it's a function, build a Γ environment shadowing the global one.
-        //      Then, add all local variables inside of the block.
-        //      Then, type the block.
 
     //  If it's an expression, type the expr in the global environment.
     for expr in &mut global_exprs {
         type_expression(expr, &mut global_ctx)?;
     }
 
+    //  If it's a function, build a Γ environment shadowing the global one.
+    //      Then, add all local variables inside of the block.
+    //      Then, type the block.
+    //      Then, if possible, check all the returns.
+    for funcs in functions.values_mut() {
+        for func in funcs {
+            for arg in &func.params {
+                global_ctx.environment
+                    .entry(arg.name.name.clone())
+                    .or_default()
+                    .push(convert_to_static_type(arg.ty.as_ref()));
+            }
+
+            let extra_local_vars = collect_all_assign_in_array(&func.body.val);
+            for var in &extra_local_vars {
+                global_ctx.environment
+                    .entry(var.clone())
+                    .or_default()
+                    .push(None);
+            }
+
+            type_block(&mut func.body, &mut global_ctx)?;
+
+            if let Some(ret_ty) = convert_to_static_type(func.ret_ty.as_ref()) {
+                // Implicit return.
+                if !func.body.trailing_semicolon && func.body.val.len() > 0 && !is_compatible(func.body.val.last().unwrap().static_ty.as_ref(), Some(&ret_ty)) {
+                    return Err(
+                        (func.body.val.last().unwrap().span, format!("Invalid implicit return type, expected '{:?}', found '{:?}'",
+                                                                     func.body.val.last().unwrap().static_ty,
+                                                                     ret_ty).to_string()).into()
+                    );
+                }
+                // Explicit returns.
+                verify_returns(&func.body, ret_ty)?;
+            }
+
+
+            for arg in &func.params {
+                global_ctx.environment.get_mut(&arg.name.name).unwrap().pop();
+            }
+
+            for var in extra_local_vars {
+                global_ctx.environment.get_mut(&var).unwrap().pop();
+            }
+        }
+    }
+
+
     // Returns the enriched declarations.
     Ok(TypedDecls {
-        functions: global_ctx.functions,
+        functions,
         structures: global_ctx.structures,
         global_expressions: global_exprs
     })
