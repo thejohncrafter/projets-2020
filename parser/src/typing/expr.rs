@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use super::data::*;
 use crate::ast::*;
 
@@ -16,6 +17,23 @@ fn is_one_of_or_any<'a>(alpha: &'a Exp<'a>, ts: &[StaticType]) -> bool {
         return false;
     }
 }
+
+// We want to know if target improves the precision of the original type.
+fn is_valuable_type(origin: Option<&StaticType>, target: Option<&StaticType>) -> bool {
+    match origin {
+        None => true,
+        Some(s) => match target {
+            None => false,
+            Some(t) => match (s, t) {
+                (StaticType::Any, _) => true,
+                (_, StaticType::Any) => false,
+                (_, _) => true
+            }
+        }
+    }
+}
+
+
 
 fn is_builtin_function(name: &String) -> bool {
     match name.as_str() {
@@ -106,6 +124,19 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
                             return Err(
                                 (e.span, format!("This expression has type '{:?}' but is incompatible with '{:?}' (expected)", e.static_ty, ctx.environment[&lv.name].last().unwrap()).to_string()).into()
                             );
+                        }
+
+                        // Only replace the type if it improves it.
+                        let current_type = ctx.environment.get_mut(&lv.name).unwrap().pop();
+                        match current_type {
+                            None => ctx.environment.get_mut(&lv.name).unwrap().push(e.static_ty.clone()),
+                            Some(ct) => {
+                                if is_valuable_type(ct.as_ref(), e.static_ty.as_ref()) {
+                                    ctx.environment.get_mut(&lv.name).unwrap().push(e.static_ty.clone());
+                                } else {
+                                    ctx.environment.get_mut(&lv.name).unwrap().push(ct);
+                                }
+                            }
                         }
                     },
                     Some(prefix_e) => {
@@ -287,10 +318,18 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
                             );
                         }
 
+                        println!("DEBUG: current types: '{:?}' for '{:?}'", ctx.environment[&lv.name], lv.name);
+
                         expr.static_ty = ctx.environment[&lv.name].last().unwrap_or(&Some(StaticType::Any)).clone();
                     },
                     Some(e) => {
                         fill_types(e, ctx)?;
+
+                        // FIXME(Ryan): we should be able to check if e.static_ty is actually a
+                        // structure and check whether lv.name is indeed a field of e.static_ty
+                        // structure.
+
+                        expr.static_ty = ctx.all_fields[&lv.name].clone();
                     }
                 }
             },
@@ -359,15 +398,23 @@ pub fn type_expression<'a>(toplevel: &mut Exp<'a>, context: &mut TypingContext<'
 
                 if is_any_or(e, StaticType::Bool) {
                     let local_extra_vars = collect_all_assign_in_array(&block.val);
+                    let mut out_of_scope_vars: HashSet<String> = HashSet::new(); 
 
                     for var in &local_extra_vars {
-                        ctx.environment.entry(var.to_string()).or_default().push(None);
+                        if !ctx.environment.contains_key(var) {
+                            ctx.environment.entry(var.to_string()).or_default().push(None);
+                        } else {
+                            println!("DEBUG: '{}' is out of scope, so it will not be destroyed (state: '{:?}'.", var, ctx.environment[var]);
+                            out_of_scope_vars.insert(var.clone());
+                        }
                     }
 
                     type_block(block, ctx)?;
 
                     for var in local_extra_vars {
-                        ctx.environment.get_mut(&var).unwrap().pop();
+                        if !out_of_scope_vars.contains(&var) {
+                            ctx.environment.get_mut(&var).unwrap().pop();
+                        }
                     }
 
                     expr.static_ty = Some(StaticType::Nothing);

@@ -66,6 +66,7 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                     all_fields.insert(
                         fname.to_string().clone(),
                         convert_to_static_type(field.ty.as_ref())
+                        .or(Some(StaticType::Any))
                     );
 
                     if s.mutable {
@@ -163,15 +164,18 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
                 global_ctx.environment
                     .entry(arg.name.name.clone())
                     .or_default()
-                    .push(convert_to_static_type(arg.ty.as_ref()));
+                    .push(convert_to_static_type(arg.ty.as_ref()).or(Some(StaticType::Any)));
             }
 
             let extra_local_vars = collect_all_assign_in_array(&func.body.val);
             for var in &extra_local_vars {
-                global_ctx.environment
-                    .entry(var.clone())
-                    .or_default()
-                    .push(None);
+                // No need to pollute and get inferior types.
+                if !global_ctx.environment.contains_key(var) {
+                    global_ctx.environment
+                        .entry(var.clone())
+                        .or_default()
+                        .push(None);
+                }
             }
 
             type_block(&mut func.body, &mut global_ctx)?;
