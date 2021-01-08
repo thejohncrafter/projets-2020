@@ -27,7 +27,7 @@ tarball-pjuliac:
 	cp Makefile /tmp/Lahfa-Marquet/
 	cp compil/compil_cargo.txt /tmp/Lahfa-Marquet/Cargo.toml
 	cp rapports/compil/rapport_miprojet.pdf /tmp/Lahfa-Marquet/rapport.pdf
-	cd /tmp; zip -9 Lahfa-Marquet.zip ./Lahfa-Marquet/** && rm -rf /tmp/Lahfa-Marquet
+	cd /tmp; zip -r -9 Lahfa-Marquet.zip ./Lahfa-Marquet/**
 
 check:
 	@$(CARGO) check
