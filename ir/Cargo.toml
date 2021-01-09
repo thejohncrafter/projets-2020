@@ -1,0 +1,12 @@
+
+[package]
+name = "ir"
+version = "0.1.0"
+authors = ["thejohncrafter"]
+edition = "2018"
+
+[dependencies]
+clap = "2.33.3"
+automata = {path = "../automata"}
+parsergen = {path = "../parsergen"}
+

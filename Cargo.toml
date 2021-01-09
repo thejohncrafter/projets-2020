@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["automata", "parsergen", "sim", "parser"]
+members = ["automata", "parsergen", "sim", "parser", "ir"]
 
 # The proc-macros in "parsergen" are slow, so we
 # want to optimize them.

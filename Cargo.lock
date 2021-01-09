@@ -55,6 +55,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ir"
+version = "0.1.0"
+dependencies = [
+ "automata",
+ "clap",
+ "parsergen",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
