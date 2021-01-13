@@ -41,7 +41,7 @@ A language where
  * Instructions map trivially to assembly (hopefully 1:1)
    except function calls
  * Register allocation isn't explicit : everything is stored in
-   pseudo-reisters (that will be mapped to real registers or to
+   pseudo-registers (that will be mapped to real registers or to
    stack locations during register allocation).
  * No control structures : flow control is done using labels
    and jumps

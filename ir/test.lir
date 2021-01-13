@@ -1,0 +1,9 @@
+
+fn main(a, b) {
+    c <- a + b;
+    jump test;
+test:
+    a <- b && c;
+    return c, a;
+}
+
