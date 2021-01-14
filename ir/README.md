@@ -51,12 +51,17 @@ A language where
    to assembly : the way arguments are passed and registers are
    saved is handled during the last compilation phase
    (LIR to assembly)
+ * Function either return two values or no value
+   (we want to return two values as in Petit Julia everything
+   is represented by two 64 bit words).
 
 Only two abstractions over assembly remain here : functions
 and pseudo-registers.
 
-For a first implementation, we may want to make everything live
-on the stack.
+The compiled functions respect the System V AMD64 ABI.
+
+In this implementation, everything is saved on the stack
+(this was the fastest way to get a working version).
 
 # Compilation
 
@@ -66,4 +71,7 @@ The first goal is to get this pipeline working.
 
 The two intermediate languages are designed to leave some space
 for optimizations, like SSA and efficient register allocation.
+
+The script `compile_lir.sh` runs compiles `ir/test.lir` to `ir/target/test.s`,
+then performs assembly and linking within `ir/target/`.
 

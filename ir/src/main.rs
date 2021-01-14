@@ -1,6 +1,7 @@
 
 mod hir;
 mod lir;
+mod lir_to_asm;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -10,6 +11,7 @@ use clap::{Arg, App, SubCommand};
 
 use hir::parsing::*;
 use lir::parsing::*;
+use lir_to_asm::*;
 
 fn read_file(name: &str) -> Result<String, String> {
     let path = Path::new(name);
@@ -24,6 +26,23 @@ fn read_file(name: &str) -> Result<String, String> {
     file.read_to_string(&mut s).map_err(|e| e.to_string())?;
 
     Ok(s)
+}
+
+fn write_file(name: &str, contents: &str) -> Result<(), String> {
+    let path = Path::new(name);
+    let display = path.display();
+
+    let mut file = match File::create(&path) {
+        Err(why) => Err(format!("Couldn't open {} : {}", display, why)),
+        Ok(file) => Ok(file),
+    }?;
+
+    match file.write_fmt(format_args!("{}", contents)) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(format!("{}", e)),
+    }?;
+
+    Ok(())
 }
 
 fn compile_hir(file_name: &str) -> Result<(), String> {
@@ -42,7 +61,7 @@ fn compile_hir(file_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn compile_lir(file_name: &str) -> Result<(), String> {
+fn compile_lir(file_name: &str) -> Result<String, String> {
     let s = read_file(file_name)?;
     let res = parse_lir(file_name, &s);
 
@@ -55,7 +74,13 @@ fn compile_lir(file_name: &str) -> Result<(), String> {
             println!("{}", f);
         });
 
-    Ok(())
+    println!();
+    println!("** compiled **");
+
+    let compiled = lir_to_asm(&res).map_err(|e| format!("{}", e))?;
+    println!("{}", compiled);
+
+    Ok(compiled)
 }
 
 fn main() {
@@ -73,7 +98,10 @@ fn main() {
             .arg(Arg::with_name("input")
                 .help("The source file")
                 .required(true)
-                .index(1)))
+                .index(1))
+            .arg(Arg::with_name("output")
+                .short("o")
+                .takes_value(true)))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("hir") {
@@ -93,7 +121,14 @@ fn main() {
         let res = compile_lir(file_name);
 
         match res {
-            Ok(()) => (),
+            Ok(asm) => {
+                if let Some(file_name) = matches.value_of("output") {
+                    match write_file(file_name, &asm) {
+                        Ok(()) => (),
+                        Err(e) => println!("{}", e)
+                    }
+                }
+            },
             Err(e) => {
                 println!("{}", e)
             }

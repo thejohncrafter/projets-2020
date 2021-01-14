@@ -1,9 +1,18 @@
 
-fn main(a, b) {
-    c <- a + b;
-    jump test;
-test:
-    a <- b && c;
-    return c, a;
+fn fact(n) {
+    not_zero <- n != 0;
+    jumpif not_zero not_zero;
+zero:
+    return 1, 0;
+not_zero:
+    prev <- n - 1;
+    (k, prev) <- call fact(prev);
+    val <- k * n;
+    return val, 0;
+}
+
+fn main() {
+    (a, _) <- call fact(5);
+    call print_int(a);
 }
 
