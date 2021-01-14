@@ -9,6 +9,7 @@ pub enum Type {
 pub enum Val {
     Var(String),
     Const(u64, u64),
+    Str(String),
 }
 
 pub enum BinOp {

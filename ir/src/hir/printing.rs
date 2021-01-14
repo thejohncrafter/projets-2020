@@ -25,6 +25,7 @@ impl std::fmt::Display for Val {
         match self {
             Val::Var(name) => write!(f, "{}", name),
             Val::Const(u, v) => write!(f, "{{{}, {}}}", u, v),
+            Val::Str(s) => write!(f, "{:?}", s),
         }
     }
 }

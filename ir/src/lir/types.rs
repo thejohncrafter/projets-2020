@@ -12,6 +12,7 @@ impl Label {
 pub enum Val {
     Var(String),
     Const(u64),
+    Str(String),
 }
 
 pub enum BinOp {

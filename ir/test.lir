@@ -12,6 +12,7 @@ not_zero:
 }
 
 fn main() {
+    call print_string("fact :");
     (a, _) <- call fact(5);
     call print_int(a);
 }

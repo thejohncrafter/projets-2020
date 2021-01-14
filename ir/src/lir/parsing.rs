@@ -76,7 +76,29 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             Ok(Some(Token::Num(parse_u64($text)?)))
         },
         ('"' & (behaved | '\\' & ('\\' | '"' | 'n' | 't'))* & '"') => {
-            Ok(Some(Token::Str($text.to_string())))
+            let mut v = Vec::new();
+            let mut chars = $text.chars();
+            chars.next().unwrap();
+
+            loop {
+                let c = chars.next().unwrap();
+
+                let d = if c == '\\' {
+                    match chars.next().unwrap() {
+                        '\\' => '\\',
+                        '"' => '"',
+                        'n' => '\n',
+                        't' => '\t',
+                        _ => panic!()
+                    }
+                } else if c == '"' {
+                    break
+                } else { c };
+
+                v.push(d);
+            }
+
+            Ok(Some(Token::Str(v.into_iter().collect())))
         },
 
         ('{') => {punct!(LBracket)},
@@ -129,6 +151,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         terms: [
             ident: String,
             uint: u64,
+            string: String,
 
             FN: (),
             JUMP: (),
@@ -232,7 +255,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                                 Not => $NOT(()),
                             }
                         },
-                        _ => panic!(),
+                        Token::Str(s) => $string(s),
                     };
                     Ok((span, TokenOrEof::Token(token)))
                 } else {
@@ -358,6 +381,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (val -> i:uint) => {
                 Ok(Val::Const($i))
             },
+            (val -> s:string) => {
+                Ok(Val::Str($s))
+            }
         }
 
         on_empty: {Err("Expected a program".to_string())}

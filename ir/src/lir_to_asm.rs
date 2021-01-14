@@ -114,8 +114,33 @@ fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>)
     (recv.var_map, recv.label_map)
 }
 
+struct StringRegistry {
+    strings: Vec<String>,
+    next_id: usize,
+}
+
+impl StringRegistry {
+    fn new() -> Self {
+        StringRegistry {
+            strings: Vec::new(),
+            next_id: 0,
+        }
+    }
+
+    /*
+     * Registers a String `s` and returns the ID `s` was given.
+     */
+    fn register(&mut self, s: String) -> usize {
+        let id = self.next_id;
+        self.strings.push(s);
+        self.next_id += 1;
+        id
+    }
+}
+
 fn write_get_val(
     asm: &mut String,
+    reg: &mut StringRegistry,
     var_ids: &HashMap<String, usize>,
     val: &Val,
     dest: &str
@@ -126,7 +151,11 @@ fn write_get_val(
         },
         Val::Const(i) => {
             writeln!(asm, "\tmovq ${}, {}", i, dest)?
-        }
+        },
+        Val::Str(s) => {
+            let id = reg.register(s.clone());
+            writeln!(asm, "\tmovq $string_{}, %rax", id)?;
+        },
     }
 
     Ok(())
@@ -134,6 +163,7 @@ fn write_get_val(
 
 fn inst_to_asm(
     asm: &mut String,
+    reg: &mut StringRegistry,
     fn_ids: &HashMap<String, usize>,
     label_ids: &HashMap<String, usize>,
     var_ids: &HashMap<String, usize>,
@@ -142,8 +172,8 @@ fn inst_to_asm(
 ) -> Result<(), Error> {
     match inst {
         Instruction::Bin(dest, op, a, b) => {
-            write_get_val(asm, var_ids, a, "%rax")?;
-            write_get_val(asm, var_ids, b, "%rbx")?;
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, var_ids, b, "%rbx")?;
 
             match op {
                 BinOp::And => writeln!(asm, "\tandq %rbx, %rax")?,
@@ -192,18 +222,18 @@ fn inst_to_asm(
             writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
         },
         Instruction::Mov(dest, a) => {
-            write_get_val(asm, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
             writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
         },
         Instruction::Access(dest, a, offset) => {
-            write_get_val(asm, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
             writeln!(asm, "\tmov %{}, {}(%rax)", dest, offset)?;
         },
         Instruction::Jump(label) => {
             writeln!(asm, "\tjmp fn_{}_lbl_{}", fn_id, label_ids.get(&label.name).unwrap())?;
         },
         Instruction::Jumpif(a, label) => {
-            write_get_val(asm, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
             writeln!(asm, "\tmovq $0, %rbx")?;
             writeln!(asm, "\tcmp %rax, %rbx")?;
             
@@ -238,7 +268,11 @@ fn inst_to_asm(
                         },
                         Val::Const(i) => {
                             writeln!(asm, "\tmovq ${}, %rax", i)?;
-                        }
+                        },
+                        Val::Str(s) => {
+                            let id = reg.register(s.clone());
+                            writeln!(asm, "\tmovq $string_{}, %rax", id)?;
+                        },
                     }
 
                     match i {
@@ -263,6 +297,13 @@ fn inst_to_asm(
 
                     writeln!(asm, "\tcall print_int")?
                 },
+                "print_string" => {
+                    if args.len() != 1 {
+                        Err("Expected 1 argument for \"print_string\".".to_string())?
+                    }
+
+                    writeln!(asm, "\tcall print_string")?
+                },
                 _ => {
                     if let Some(id) = fn_ids.get(fn_name) {
                         writeln!(asm, "\tcall fn_{}", id)?
@@ -284,8 +325,8 @@ fn inst_to_asm(
             }
         },
         Instruction::Return(u, v) => {
-            write_get_val(asm, var_ids, u, "%rax")?;
-            write_get_val(asm, var_ids, v, "%rdx")?;
+            write_get_val(asm, reg, var_ids, u, "%rax")?;
+            write_get_val(asm, reg, var_ids, v, "%rdx")?;
             writeln!(asm, "\tjmp fn_{}_exit", fn_id)?;
         },
     }
@@ -295,6 +336,7 @@ fn inst_to_asm(
 
 fn fn_to_asm(
     asm: &mut String,
+    reg: &mut StringRegistry,
     fn_ids: &HashMap<String, usize>,
     f: &Function,
     id: usize
@@ -333,7 +375,7 @@ fn fn_to_asm(
     f.body.stmts.iter().try_for_each(|stmt| -> Result<(), Error> {
             match stmt {
                 Statement::Inst(inst) => {
-                    inst_to_asm(asm, fn_ids, &label_ids, &var_ids, id, inst)
+                    inst_to_asm(asm, reg, fn_ids, &label_ids, &var_ids, id, inst)
                 },
                 Statement::Label(label) => {
                     writeln!(asm, "fn_{}_lbl_{}:", id, label_ids.get(&label.name).unwrap())
@@ -355,6 +397,7 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
     let mut s = String::new();
     let asm = &mut s;
     let mut fn_ids = HashMap::new();
+    let mut reg = StringRegistry::new();
 
     fns.iter().enumerate().try_for_each(|(i, f)| {
             if fn_ids.contains_key(&f.name) {
@@ -379,18 +422,37 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
 
     writeln!(asm, "print_int:")?;
     writeln!(asm, "\tmov %rdi, %rsi")?;
-    writeln!(asm, "\tmov $message, %rdi")?;
+    writeln!(asm, "\tmov $message_int, %rdi")?;
     writeln!(asm, "\tmov $0, %rax")?;
     writeln!(asm, "\tcall printf")?;
     writeln!(asm, "\tmov $0, %rax")?;
     writeln!(asm, "\tmov $0, %rdx")?;
     writeln!(asm, "\tret")?;
 
-    fns.iter().enumerate().try_for_each(|(i, f)| fn_to_asm(asm, &fn_ids, f, i))?;
+    writeln!(asm, "print_string:")?;
+    writeln!(asm, "\tmov %rdi, %rsi")?;
+    writeln!(asm, "\tmov $message_string, %rdi")?;
+    writeln!(asm, "\tmov $0, %rax")?;
+    writeln!(asm, "\tcall printf")?;
+    writeln!(asm, "\tmov $0, %rax")?;
+    writeln!(asm, "\tmov $0, %rdx")?;
+    writeln!(asm, "\tret")?;
+
+    fns.iter().enumerate().try_for_each(
+            |(i, f)| fn_to_asm(asm, &mut reg, &fn_ids, f, i)
+        )?;
 
     writeln!(asm, "\t.data")?;
-    writeln!(asm, "message:")?;
+    writeln!(asm, "message_int:")?;
     writeln!(asm, "\t.string \"%d\\n\"")?;
+    writeln!(asm, "message_string:")?;
+    writeln!(asm, "\t.string \"%s\\n\"")?;
+
+    reg.strings.iter().enumerate().try_for_each(|(i, s)| -> Result<(), Error> {
+            writeln!(asm, "string_{}:", i)?;
+            writeln!(asm, "\t.string {:?}", s)?;
+            Ok(())
+        })?;
 
     Ok(s)
 }
