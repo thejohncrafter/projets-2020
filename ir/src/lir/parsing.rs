@@ -143,7 +143,6 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         ($op:ident, $dest:ident, $a:ident, $b:ident, $($id:ident),*) => {
             match $op {
                 $(BinOp::$id => Ok(Statement::Inst(Instruction::$id($dest, $a, $b)))),*,
-                _ => panic!()
             }
         };
     }

@@ -3,7 +3,6 @@ mod hir;
 mod lir;
 
 use std::fs::File;
-use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 

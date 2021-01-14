@@ -1,6 +1,4 @@
 
-use std::fmt::Write;
-
 use super::types::*;
 
 impl std::fmt::Display for Val {

@@ -8,23 +8,6 @@ use parsergen::{lex, parse};
 
 use super::types::*;
 
-enum BinOp {
-    Equ,
-    Neq,
-    Lt,
-    Leq,
-    Gt,
-    Geq,
-
-    And,
-    Or,
-
-    Add,
-    Sub,
-    Mul,
-    Div,
-}
-
 enum Punct {
     LBracket,
     RBracket,
@@ -138,15 +121,6 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             Err(e) => Some(Err(e)) // We will handle that later.
         }
     });
-
-    macro_rules! make_instruction {
-        ($op:ident, $dest:ident, $a:ident, $b:ident, $($id:ident),*) => {
-            match $op {
-                $(BinOp::$id => Ok(Statement::Inst(Instruction::$id($dest, $a, $b)))),*,
-                _ => panic!()
-            }
-        };
-    }
     
     let res = parse! {
         src_lifetime: 'a
