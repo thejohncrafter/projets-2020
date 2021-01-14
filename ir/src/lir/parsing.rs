@@ -8,23 +8,6 @@ use parsergen::{lex, parse};
 
 use super::types::*;
 
-enum BinOp {
-    Equ,
-    Neq,
-    Lt,
-    Leq,
-    Gt,
-    Geq,
-
-    And,
-    Or,
-
-    Add,
-    Sub,
-    Mul,
-    Div,
-}
-
 enum Punct {
     LBracket,
     RBracket,
@@ -138,14 +121,6 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             Err(e) => Some(Err(e)) // We will handle that later.
         }
     });
-
-    macro_rules! make_instruction {
-        ($op:ident, $dest:ident, $a:ident, $b:ident, $($id:ident),*) => {
-            match $op {
-                $(BinOp::$id => Ok(Statement::Inst(Instruction::$id($dest, $a, $b)))),*,
-            }
-        };
-    }
     
     let res = parse! {
         src_lifetime: 'a
@@ -326,12 +301,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             },
 
             (statement_semi -> dest:ident ARROW a:val op:bin_op b:val) => {
-                make_instruction!(
-                    $op, $dest, $a, $b,
-                    Equ, Neq, Lt, Leq, Gt, Geq,
-                    And, Or,
-                    Add, Sub, Mul, Div
-                )
+                Ok(Statement::Inst(Instruction::Bin($dest, $op, $a, $b)))
             },
 
             (statement_semi -> dest:ident ARROW v:val) => {
@@ -349,11 +319,18 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Statement::Inst(Instruction::Jumpif($cond, Label::new($l))))
             },
 
-            (statement_semi -> dest:ident ARROW CALL f:ident LBRACKET RBRACKET) => {
-                Ok(Statement::Inst(Instruction::Call($dest, $f, vec!())))
+
+            (statement_semi -> CALL f:ident LPAR RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(None, $f, vec!())))
             },
-            (statement_semi -> dest:ident ARROW CALL f:ident LBRACKET v:val_list RBRACKET) => {
-                Ok(Statement::Inst(Instruction::Call($dest, $f, $v)))
+            (statement_semi -> CALL f:ident LPAR v:val_list RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(None, $f, $v)))
+            },
+            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW CALL f:ident LPAR RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $f, vec!())))
+            },
+            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW CALL f:ident LPAR v:val_list RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $f, $v)))
             },
 
             (statement_semi -> RETURN v0:val COMMA v1:val) => {

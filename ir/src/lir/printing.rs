@@ -12,37 +12,37 @@ impl std::fmt::Display for Val {
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        macro_rules! cases {
-            ($(($variant:ident, $symbol:expr)),*) => {
-                match self {
-                    $(Instruction::$variant(dest, a, b) => {
-                        writeln!(f, "\t{} <- {} {} {};", dest, a, $symbol, b)?;
-                    },)*
-                    _ => ()
-                }
-            };
-        }
-
-        cases!(
-            (And, "&&"),
-            (Or,  "||"),
-
-            (Equ, "=="),
-            (Neq, "!="),
-            (Lt,  "<"),
-            (Leq, "<="),
-            (Gt,  ">"),
-            (Geq, ">="),
-
-            (Add, "+"),
-            (Sub, "-"),
-            (Mul, "*"),
-            (Div, "%")
-        );
-
         match self {
+            Instruction::Bin(dest, op, a, b) => {
+                macro_rules! cases {
+                    ($(($variant:ident, $symbol:expr)),*) => {
+                        match op {
+                            $(BinOp::$variant => {
+                                writeln!(f, "\t{} <- {} {} {};", dest, a, $symbol, b)?;
+                            },)*
+                        }
+                    };
+                }
+
+                cases!(
+                    (And, "&&"),
+                    (Or,  "||"),
+
+                    (Equ, "=="),
+                    (Neq, "!="),
+                    (Lt,  "<"),
+                    (Leq, "<="),
+                    (Gt,  ">"),
+                    (Geq, ">="),
+
+                    (Add, "+"),
+                    (Sub, "-"),
+                    (Mul, "*"),
+                    (Div, "%")
+                );
+            },
             Instruction::Mov(dest, v) => {
-                writeln!(f, "\t{} <- {}", dest, v)?
+                writeln!(f, "\t{} <- {};", dest, v)?
             },
             Instruction::Access(dest, s, i) => {
                 writeln!(f, "\t{} <- {}[{}];", dest, s, i)?
@@ -54,21 +54,27 @@ impl std::fmt::Display for Instruction {
                 writeln!(f, "\tjumpif {} {};", a, l.name)?
             },
             Instruction::Call(dest, fn_name, args) => {
-                writeln!(
-                    f, "\t{} <- {}({});",
-                    dest, fn_name,
-                    args.iter().enumerate().map(|(i, a)| if i == 0 {
-                            format!("{}", a)
-                        } else {
-                            format!(", {}", a)
-                        }).collect::<String>()
-                )?
+                let args_fmt = args.iter().enumerate().map(|(i, a)| if i == 0 {
+                        format!("{}", a)
+                    } else {
+                        format!(", {}", a)
+                    }).collect::<String>();
+                
+                if let Some((dest1, dest2)) = dest {
+                    writeln!(
+                        f, "\t({}, {}) <- call {}({});",
+                        dest1, dest2, fn_name, args_fmt
+                    )?
+                } else {
+                    writeln!(
+                        f, "\tcall {}({});",
+                        fn_name, args_fmt
+                    )?
+                }
             },
             Instruction::Return(v0, v1) => {
                 writeln!(f, "\treturn {}, {};", v0, v1)?
             },
-
-            _ => ()
         }
 
         Ok(())

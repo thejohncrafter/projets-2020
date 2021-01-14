@@ -14,21 +14,14 @@ pub enum Val {
     Const(u64),
 }
 
+pub enum BinOp {
+    And, Or,
+    Equ, Neq, Lt, Leq, Gt, Geq,
+    Add, Sub, Mul, Div,
+}
+
 pub enum Instruction {
-    And(String, Val, Val),
-    Or(String, Val, Val),
-
-    Equ(String, Val, Val),
-    Neq(String, Val, Val),
-    Lt(String, Val, Val),
-    Leq(String, Val, Val),
-    Gt(String, Val, Val),
-    Geq(String, Val, Val),
-
-    Add(String, Val, Val),
-    Sub(String, Val, Val),
-    Mul(String, Val, Val),
-    Div(String, Val, Val),
+    Bin(String, BinOp, Val, Val),
 
     Mov(String, Val),
 
@@ -37,7 +30,7 @@ pub enum Instruction {
     Jump(Label),
     Jumpif(Val, Label),
 
-    Call(String, String, Vec<Val>),
+    Call(Option<(String, String)>, String, Vec<Val>),
     Return(Val, Val),
 }
 

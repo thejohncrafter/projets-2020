@@ -31,35 +31,35 @@ impl std::fmt::Display for Val {
 
 impl std::fmt::Display for Callable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        macro_rules! cases {
-                ($(($variant:ident, $symbol:expr)),*) => {
-                    match self {
-                        $(Callable::$variant(a, b) => {
-                        write!(f, "{} {} {};", a, $symbol, b)?;
-                    },)*
-                    _ => ()
-                }
-            };
-        }
- 
-        cases!(
-            (And, "&&"),
-            (Or,  "||"),
-
-            (Equ, "=="),
-            (Neq, "!="),
-            (Lt,  "<"),
-            (Leq, "<="),
-            (Gt,  ">"),
-            (Geq, ">="),
-
-            (Add, "+"),
-            (Sub, "-"),
-            (Mul, "*"),
-            (Div, "%")
-        );
-
         match self {
+            Callable::Bin(op, a, b) => {
+                macro_rules! cases {
+                        ($(($variant:ident, $symbol:expr)),*) => {
+                            match op {
+                                $(BinOp::$variant => {
+                                write!(f, "{} {} {};", a, $symbol, b)?;
+                            },)*
+                        }
+                    };
+                }
+         
+                cases!(
+                    (And, "&&"),
+                    (Or,  "||"),
+
+                    (Equ, "=="),
+                    (Neq, "!="),
+                    (Lt,  "<"),
+                    (Leq, "<="),
+                    (Gt,  ">"),
+                    (Geq, ">="),
+
+                    (Add, "+"),
+                    (Sub, "-"),
+                    (Mul, "*"),
+                    (Div, "%")
+                );
+            },
             Callable::Assign(v) => {
                 write!(f, "{}", v)?;
             },
@@ -69,8 +69,6 @@ impl std::fmt::Display for Callable {
             Callable::Access(v, i) => {
                 write!(f, "{}[{}]", v, i)?;
             },
-
-            _ => ()
         }
 
         Ok(())

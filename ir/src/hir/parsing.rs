@@ -186,6 +186,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             statement: Statement,
             statement_semi: Statement,
             callable: Callable,
+            bin_op: BinOp,
             val: Val,
             ty: Type,
         ]
@@ -329,20 +330,9 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Statement::While($v, $b))
             },
 
-            (callable -> a:val EQU b:val) => {Ok(Callable::Equ($a, $b))},
-            (callable -> a:val NEQ b:val) => {Ok(Callable::Neq($a, $b))},
-            (callable -> a:val LT  b:val) => {Ok(Callable::Lt($a, $b))},
-            (callable -> a:val LEQ b:val) => {Ok(Callable::Leq($a, $b))},
-            (callable -> a:val GT  b:val) => {Ok(Callable::Gt($a, $b))},
-            (callable -> a:val GEQ b:val) => {Ok(Callable::Geq($a, $b))},
-            
-            (callable -> a:val AND b:val) => {Ok(Callable::And($a, $b))},
-            (callable -> a:val OR  b:val) => {Ok(Callable::Or($a, $b))},
-
-            (callable -> a:val ADD b:val) => {Ok(Callable::Add($a, $b))},
-            (callable -> a:val SUB b:val) => {Ok(Callable::Sub($a, $b))},
-            (callable -> a:val MUL b:val) => {Ok(Callable::Mul($a, $b))},
-            (callable -> a:val DIV b:val) => {Ok(Callable::Div($a, $b))},
+            (callable -> a:val op:bin_op b:val) => {
+                Ok(Callable::Bin($op, $a, $b))
+            },
 
             (callable -> a:val) => {
                 Ok(Callable::Assign($a))
@@ -355,6 +345,21 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (callable -> v:val LSQUARE i:uint RSQUARE) => {
                 Ok(Callable::Access($v, $i))
             },
+
+            (bin_op -> EQU) => {Ok(BinOp::Equ)},
+            (bin_op -> NEQ) => {Ok(BinOp::Neq)},
+            (bin_op -> LT ) => {Ok(BinOp::Lt)},
+            (bin_op -> LEQ) => {Ok(BinOp::Leq)},
+            (bin_op -> GT ) => {Ok(BinOp::Gt)},
+            (bin_op -> GEQ) => {Ok(BinOp::Geq)},
+            
+            (bin_op -> AND) => {Ok(BinOp::And)},
+            (bin_op -> OR ) => {Ok(BinOp::Or)},
+
+            (bin_op -> ADD) => {Ok(BinOp::Add)},
+            (bin_op -> SUB) => {Ok(BinOp::Sub)},
+            (bin_op -> MUL) => {Ok(BinOp::Mul)},
+            (bin_op -> DIV) => {Ok(BinOp::Div)},
 
             (val -> id:ident) => {
                 Ok(Val::Var($id))

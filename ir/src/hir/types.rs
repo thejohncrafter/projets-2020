@@ -11,21 +11,14 @@ pub enum Val {
     Const(u64, u64),
 }
 
+pub enum BinOp {
+    And, Or,
+    Equ, Neq, Lt, Leq, Gt, Geq,
+    Add, Sub, Mul, Div
+}
+
 pub enum Callable {
-    And(Val, Val),
-    Or(Val, Val),
-
-    Equ(Val, Val),
-    Neq(Val, Val),
-    Lt(Val, Val),
-    Leq(Val, Val),
-    Gt(Val, Val),
-    Geq(Val, Val),
-
-    Add(Val, Val),
-    Sub(Val, Val),
-    Mul(Val, Val),
-    Div(Val, Val),
+    Bin(BinOp, Val, Val),
 
     Assign(Val),
 
