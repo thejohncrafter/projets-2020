@@ -23,6 +23,7 @@ pub enum Callable {
 
     Assign(Val),
 
+    IsType(Val, Type),
     Cast(Val, Type),
     Access(Val, u64),
 }

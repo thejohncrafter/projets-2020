@@ -161,6 +161,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             IF: (),
             ELSE: (),
             WHILE: (),
+            TYPEOF: (),
 
             LBRACKET: (),
             RBRACKET: (),
@@ -230,6 +231,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                                 "if" => $IF(()),
                                 "else" => $ELSE(()),
                                 "while" => $WHILE(()),
+                                "typeof" => $TYPEOF(()),
 
                                 "Int64" => $INT64(()),
                                 "Bool" => $BOOL(()),
@@ -361,6 +363,10 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
 
             (callable -> a:val) => {
                 Ok(Callable::Assign($a))
+            },
+
+            (callable -> TYPEOF v:val EQU t:ty) => {
+                Ok(Callable::IsType($v, $t))
             },
 
             (callable -> LPAR t:ty RPAR v:val) => {

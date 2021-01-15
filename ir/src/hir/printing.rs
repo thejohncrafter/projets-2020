@@ -64,6 +64,9 @@ impl std::fmt::Display for Callable {
             Callable::Assign(v) => {
                 write!(f, "{}", v)?;
             },
+            Callable::IsType(v, t) => {
+                write!(f, "typeof {} == {}", v, t)?;
+            },
             Callable::Cast(v, t) => {
                 write!(f, "({}) {}", t, v)?;
             },
