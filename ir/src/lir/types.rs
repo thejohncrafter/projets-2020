@@ -1,4 +1,5 @@
 
+#[derive(Clone)]
 pub struct Label {
     pub name: String,
 }
@@ -30,6 +31,7 @@ pub enum Instruction {
 
     Jump(Label),
     Jumpif(Val, Label),
+    JumpifNot(Val, Label),
 
     Call(Option<(String, String)>, String, Vec<Val>),
     Return(Val, Val),

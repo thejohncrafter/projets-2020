@@ -1,6 +1,8 @@
 
 mod hir;
 mod lir;
+mod error;
+mod hir_to_lir;
 mod lir_to_asm;
 
 use std::fs::File;
@@ -11,6 +13,7 @@ use clap::{Arg, App, SubCommand};
 
 use hir::parsing::*;
 use lir::parsing::*;
+use hir_to_lir::*;
 use lir_to_asm::*;
 
 fn read_file(name: &str) -> Result<String, String> {
@@ -45,7 +48,7 @@ fn write_file(name: &str, contents: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn compile_hir(file_name: &str) -> Result<(), String> {
+fn compile_hir(file_name: &str) -> Result<String, String> {
     let s = read_file(file_name)?;
     let res = parse_hir(file_name, &s);
 
@@ -54,11 +57,22 @@ fn compile_hir(file_name: &str) -> Result<(), String> {
         Err(e) => return Err(e.to_string())
     };
 
-    res.iter().for_each(|f| {
-            println!("{}", f);
+    println!("** HIR **");
+    res.iter().for_each(|d| {
+            println!("{}", d);
         });
 
-    Ok(())
+    println!();
+    println!("** LIR **");
+    let compiled = hir_to_lir(&res).map_err(|e| format!("{}", e))?;
+    compiled.iter().for_each(|f| println!("{}", f));
+ 
+    println!();
+    println!("** asm **");   
+    let asm = lir_to_asm(&compiled).map_err(|e| format!("{}", e))?;
+    println!("{}", asm);
+
+    Ok(asm)
 }
 
 fn compile_lir(file_name: &str) -> Result<String, String> {
@@ -70,12 +84,13 @@ fn compile_lir(file_name: &str) -> Result<String, String> {
         Err(e) => return Err(e.to_string())
     };
 
+    println!("** LIR **");
     res.iter().for_each(|f| {
             println!("{}", f);
         });
 
     println!();
-    println!("** compiled **");
+    println!("** asm **");
 
     let compiled = lir_to_asm(&res).map_err(|e| format!("{}", e))?;
     println!("{}", compiled);
@@ -92,7 +107,10 @@ fn main() {
             .arg(Arg::with_name("input")
                 .help("The source file")
                 .required(true)
-                .index(1)))
+                .index(1))
+            .arg(Arg::with_name("output")
+                .short("o")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("lir")
             .about("Compiles a LIR source file")
             .arg(Arg::with_name("input")
@@ -110,7 +128,14 @@ fn main() {
         let res = compile_hir(file_name);
 
         match res {
-            Ok(()) => (),
+            Ok(asm) => {
+                if let Some(file_name) = matches.value_of("output") {
+                    match write_file(file_name, &asm) {
+                        Ok(()) => (),
+                        Err(e) => println!("{}", e)
+                    }
+                }
+            },
             Err(e) => {
                 println!("{}", e)
             }

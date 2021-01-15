@@ -341,6 +341,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (statement_semi -> JUMPIF cond:val l:ident) => {
                 Ok(Statement::Inst(Instruction::Jumpif($cond, Label::new($l))))
             },
+            (statement_semi -> JUMPIF NOT cond:val l:ident) => {
+                Ok(Statement::Inst(Instruction::JumpifNot($cond, Label::new($l))))
+            },
 
 
             (statement_semi -> CALL f:ident LPAR RPAR) => {

@@ -15,6 +15,7 @@ enum Punct {
     RPar,
     LSquare,
     RSquare,
+    Dot,
     Comma,
     Colon,
     Semicolon,
@@ -46,7 +47,7 @@ enum Token {
     Punct(Punct),
 }
 
-pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Function>, ReadError<'a>> {
+pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadError<'a>> {
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
@@ -107,6 +108,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         (')') => {punct!(RPar)},
         ('[') => {punct!(LSquare)},
         (']') => {punct!(RSquare)},
+        ('.') => {punct!(Dot)},
         (',') => {punct!(Comma)},
         (':') => {punct!(Colon)},
         (';') => {punct!(Semicolon)},
@@ -155,8 +157,6 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
 
             FN: (),
             VARS: (),
-            JUMP: (),
-            JUMPIF: (),
             CALL: (),
             RETURN: (),
             IF: (),
@@ -170,6 +170,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             RPAR: (),
             LSQUARE: (),
             RSQUARE: (),
+            DOT: (),
             COMMA: (),
             COLON: (),
             SEMICOLON: (),
@@ -199,14 +200,17 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             STRUCT: (),
         ]
         nterms: [
-            functions_list: Vec<Function>,
+            decls_list: Vec<Decl>,
 
             ident_list: Vec<String>,
             val_list: Vec<Val>,
             function_head: (String, Vec<String>),
             vars_list: Vec<String>,
             statements_list: Vec<Statement>,
+            field: (String, Option<Type>),
 
+            decl: Decl,
+            structure: StructDecl,
             function: Function,
             block: Block,
             statement: Statement,
@@ -227,8 +231,6 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                             match name.as_str() {
                                 "fn" => $FN(()),
                                 "vars" => $VARS(()),
-                                "jump" => $JUMP(()),
-                                "jumpif" => $JUMPIF(()),
                                 "call" => $CALL(()),
                                 "return" => $RETURN(()),
                                 "if" => $IF(()),
@@ -255,6 +257,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                                 RPar => $RPAR(()),
                                 LSquare => $LSQUARE(()),
                                 RSquare => $RSQUARE(()),
+                                Dot => $DOT(()),
                                 Comma => $COMMA(()),
                                 Colon => $COLON(()),
                                 Semicolon => $SEMICOLON(()),
@@ -291,12 +294,12 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         }
 
         rules: {
-            (functions_list -> f:function) => {
-                Ok(vec!($f))
+            (decls_list -> d:decl) => {
+                Ok(vec!($d))
             },
-            (functions_list -> v:functions_list f:function) => {
+            (decls_list -> v:decls_list d:decl) => {
                 let mut v = $v;
-                v.push($f);
+                v.push($d);
                 Ok(v)
             },
 
@@ -341,6 +344,24 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(v)
             },
 
+            (decl -> s:structure) => {
+                Ok(Decl::Struct($s))
+            },
+            (decl -> f:function) => {
+                Ok(Decl::Function($f))
+            },
+
+            (structure -> STRUCT name:ident LBRACKET RBRACKET) => {
+                Ok(StructDecl::new($name, vec!()))
+            },
+            (structure -> STRUCT name:ident LBRACKET fields:ident_list RBRACKET) => {
+                Ok(StructDecl::new($name, $fields))
+            },
+
+            (function -> h:function_head vars:vars_list b:block) => {
+                Ok(Function::new($h.0, $h.1, $vars, $b))
+            },
+
             (block -> LBRACKET RBRACKET) => {
                 Ok(Block::new(vec!()))
             },
@@ -348,14 +369,17 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Block::new($l))
             },
 
-            (function -> h:function_head vars:vars_list b:block) => {
-                Ok(Function::new($h.0, $h.1, $vars, $b))
+            (statement -> CALL fn_name:ident LPAR RPAR SEMICOLON) => {
+                Ok(Statement::FnCall($fn_name, vec!()))
+            },
+            (statement -> CALL fn_name:ident LPAR v:val_list RPAR SEMICOLON) => {
+                Ok(Statement::FnCall($fn_name, $v))
             },
 
             (statement -> dest:ident ARROW c:callable SEMICOLON) => {
                 Ok(Statement::Call($dest, $c))
             },
-            (statement -> RETURN v:val) => {
+            (statement -> RETURN v:val SEMICOLON) => {
                 Ok(Statement::Return($v))
             },
             
@@ -365,6 +389,13 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
 
             (statement -> WHILE v:val b:block) => {
                 Ok(Statement::While($v, $b))
+            },
+
+            (callable -> CALL fn_name:ident LPAR RPAR) => {
+                Ok(Callable::Call($fn_name, vec!()))
+            },
+            (callable -> CALL f_name:ident LPAR v:val_list RPAR) => {
+                Ok(Callable::Call($f_name, $v))
             },
 
             (callable -> a:val op:bin_op b:val) => {
@@ -379,12 +410,8 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Callable::IsType($v, $t))
             },
 
-            (callable -> LPAR t:ty RPAR v:val) => {
-                Ok(Callable::Cast($v, $t))
-            },
-
-            (callable -> v:val LSQUARE i:uint RSQUARE) => {
-                Ok(Callable::Access($v, $i))
+            (callable -> v:val LSQUARE structure:ident DOT field:ident RSQUARE) => {
+                Ok(Callable::Access($v, $structure, $field))
             },
 
             (bin_op -> EQU) => {Ok(BinOp::Equ)},
@@ -405,8 +432,8 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (val -> id:ident) => {
                 Ok(Val::Var($id))
             },
-            (val -> LPAR u:uint COMMA v:uint RPAR) => {
-                Ok(Val::Const($u, $v))
+            (val -> LPAR t:ty COMMA v:uint RPAR) => {
+                Ok(Val::Const($t, $v))
             },
             (val -> s:string) => {
                 Ok(Val::Str($s))
@@ -419,7 +446,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         }
 
         on_empty: {Err("Expected a program".to_string())}
-        start: functions_list
+        start: decls_list
     };
 
     res

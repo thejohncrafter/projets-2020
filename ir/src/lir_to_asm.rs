@@ -3,32 +3,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use super::lir::types::*;
-use std::fmt;
-
-#[derive(Debug)]
-pub struct Error {
-    msg: String,
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<String> for Error {
-    fn from(error: String) -> Self {
-        Error {msg: error}
-    }
-}
-
-impl From<fmt::Error> for Error {
-    fn from(error: fmt::Error) -> Self {
-        Error {msg: format!("{}", error)}
-    }
-}
+use super::error::*;
 
 fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>) {
     struct Receiver {
@@ -92,6 +67,9 @@ fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>)
                     },
                     Instruction::Jump(_) => (),
                     Instruction::Jumpif(a, _) => {
+                        recv.recv(a);
+                    },
+                    Instruction::JumpifNot(a, _) => {
                         recv.recv(a);
                     },
                     Instruction::Call(dest, _, v) => {
@@ -243,6 +221,17 @@ fn inst_to_asm(
                 Err(format!("No label named \"{}\"", label.name))?
             }
         },
+        Instruction::JumpifNot(a, label) => {
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            writeln!(asm, "\tmovq $0, %rbx")?;
+            writeln!(asm, "\tcmp %rax, %rbx")?;
+            
+            if let Some(label_id) = label_ids.get(&label.name) {
+                writeln!(asm, "\tjz fn_{}_lbl_{}", fn_id, label_id)?;
+            } else {
+                Err(format!("No label named \"{}\"", label.name))?
+            }
+        },
         Instruction::Call(dest, fn_name, args) => {
             let stack_extra = if args.len() >= 6 {
                     if (args.len() - 6) % 2 == 0 {
@@ -291,15 +280,15 @@ fn inst_to_asm(
             // Call the function
             match fn_name.as_str() {
                 "print_int" => {
-                    if args.len() != 1 {
-                        Err("Expected 1 argument for \"print_int\".".to_string())?
+                    if args.len() != 2 {
+                        Err("Expected 2 arguments for \"print_int\".".to_string())?
                     }
 
                     writeln!(asm, "\tcall print_int")?
                 },
                 "print_string" => {
-                    if args.len() != 1 {
-                        Err("Expected 1 argument for \"print_string\".".to_string())?
+                    if args.len() != 2 {
+                        Err("Expected 2 arguments for \"print_string\".".to_string())?
                     }
 
                     writeln!(asm, "\tcall print_string")?
@@ -421,7 +410,9 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
     writeln!(asm, "\tret")?;
 
     writeln!(asm, "print_int:")?;
-    writeln!(asm, "\tmov %rdi, %rsi")?;
+    // The second argument is already the right one.
+    // TODO: check the type !
+    //writeln!(asm, "\tmov %rdi, %rsi")?;
     writeln!(asm, "\tmov $message_int, %rdi")?;
     writeln!(asm, "\tmov $0, %rax")?;
     writeln!(asm, "\tcall printf")?;
@@ -430,7 +421,7 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
     writeln!(asm, "\tret")?;
 
     writeln!(asm, "print_string:")?;
-    writeln!(asm, "\tmov %rdi, %rsi")?;
+    //writeln!(asm, "\tmov %rdi, %rsi")?;
     writeln!(asm, "\tmov $message_string, %rdi")?;
     writeln!(asm, "\tmov $0, %rax")?;
     writeln!(asm, "\tcall printf")?;

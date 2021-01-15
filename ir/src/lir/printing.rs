@@ -54,6 +54,9 @@ impl std::fmt::Display for Instruction {
             Instruction::Jumpif(a, l) => {
                 writeln!(f, "\tjumpif {} {};", a, l.name)?
             },
+            Instruction::JumpifNot(a, l) => {
+                writeln!(f, "\tjumpif not {} {};", a, l.name)?
+            },
             Instruction::Call(dest, fn_name, args) => {
                 let args_fmt = args.iter().enumerate().map(|(i, a)| if i == 0 {
                         format!("{}", a)

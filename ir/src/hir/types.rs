@@ -8,7 +8,7 @@ pub enum Type {
 
 pub enum Val {
     Var(String),
-    Const(u64, u64),
+    Const(Type, u64),
     Str(String),
 }
 
@@ -19,16 +19,17 @@ pub enum BinOp {
 }
 
 pub enum Callable {
+    Call(String, Vec<Val>),
     Bin(BinOp, Val, Val),
 
     Assign(Val),
 
     IsType(Val, Type),
-    Cast(Val, Type),
-    Access(Val, u64),
+    Access(Val, String, String),
 }
 
 pub enum Statement {
+    FnCall(String, Vec<Val>),
     // Destination variable and called function
     Call(String, Callable),
     Return(Val),
@@ -58,5 +59,21 @@ impl Function {
     pub fn new(name: String, args: Vec<String>, vars: Vec<String>, body: Block) -> Self {
         Function {name, args, vars, body}
     }
+}
+
+pub struct StructDecl {
+    pub name: String,
+    pub fields: Vec<String>,
+}
+
+impl StructDecl {
+    pub fn new(name: String, fields: Vec<String>) -> StructDecl {
+        StructDecl {name, fields}
+    }
+}
+
+pub enum Decl {
+    Function(Function),
+    Struct(StructDecl),
 }
 

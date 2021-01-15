@@ -1,12 +1,27 @@
 
-fn main(a, b)
-    vars: a, b, c;
+fn fact(n)
+    vars: cond, n, m, val;
 {
-    c <- a && b;
-    if c {
-        c <- a;
+    cond <- n == (Int64, 1);
+    
+    if cond {
+        val <- (Int64, 1);
     } else {
-
+        m <- n - (Int64, 1);
+        val <- call fact(m);
+        val <- n * val;
     }
+
+    return val;
+}
+
+fn main()
+    vars: n;
+{
+    call print_string("Hello world !");
+    n <- call fact((Int64, 5));
+    call print_int(n);
+
+    return (Int64, 0);
 }
 

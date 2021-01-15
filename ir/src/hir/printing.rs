@@ -24,7 +24,7 @@ impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Val::Var(name) => write!(f, "{}", name),
-            Val::Const(u, v) => write!(f, "{{{}, {}}}", u, v),
+            Val::Const(u, v) => write!(f, "({}, {})", u, v),
             Val::Str(s) => write!(f, "{:?}", s),
         }
     }
@@ -33,6 +33,17 @@ impl std::fmt::Display for Val {
 impl std::fmt::Display for Callable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Callable::Call(fn_name, args) => {
+                writeln!(
+                    f, "call {}({})",
+                    fn_name,
+                    args.iter().enumerate().map(|(i, arg)| if i == 0 {
+                            format!("{}", arg)
+                        } else {
+                            format!(", {}", arg)
+                        }).collect::<String>()
+                )?;
+            },
             Callable::Bin(op, a, b) => {
                 macro_rules! cases {
                         ($(($variant:ident, $symbol:expr)),*) => {
@@ -67,11 +78,8 @@ impl std::fmt::Display for Callable {
             Callable::IsType(v, t) => {
                 write!(f, "typeof {} == {}", v, t)?;
             },
-            Callable::Cast(v, t) => {
-                write!(f, "({}) {}", t, v)?;
-            },
-            Callable::Access(v, i) => {
-                write!(f, "{}[{}]", v, i)?;
+            Callable::Access(v, structure, field) => {
+                write!(f, "{}[{}.{}]", v, structure, field)?;
             },
         }
 
@@ -84,11 +92,24 @@ impl std::fmt::Display for Function {
         fn print_block(f: &mut std::fmt::Formatter<'_>, indent: usize, b: &Block) -> std::fmt::Result {
             b.stmts.iter().try_for_each(|stmt| {
                 match stmt {
+                    Statement::FnCall(fn_name, args) => {
+                        writeln!(
+                            f, "{:indent$}call {}({})",
+                            "",
+                            fn_name,
+                            args.iter().enumerate().map(|(i, arg)| if i == 0 {
+                                    format!("{}", arg)
+                                } else {
+                                    format!(", {}", arg)
+                                }).collect::<String>(),
+                            indent=(4*indent)
+                        )?;
+                    },
                     Statement::Call(dest, c) => {
                         writeln!(f, "{:indent$}{} <- {}", "", dest, c, indent=(4*indent))?;
                     },
                     Statement::Return(v) => {
-                        writeln!(f, "{:indent$}return {}", "", v, indent=(4*indent))?;
+                        writeln!(f, "{:indent$}return {};", "", v, indent=(4*indent))?;
                     },
 
                     Statement::If(v, b1, b2) => {
@@ -141,3 +162,29 @@ impl std::fmt::Display for Function {
     }
 }
 
+impl std::fmt::Display for StructDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "struct {} {{", self.name)?;
+        write!(f, "    ")?;
+
+        self.fields.iter().enumerate().try_for_each(|(i, name)| if i == 0 {
+                write!(f, "{}", name)
+            } else {
+                write!(f, ", {}", name)
+            })?;
+
+        writeln!(f)?;
+        writeln!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Decl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Decl::Struct(s) => write!(f, "{}", s),
+            Decl::Function(function) => write!(f, "{}", function),
+        }
+    }
+}

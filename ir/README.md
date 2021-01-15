@@ -8,8 +8,8 @@
 A language where :
  * All values are `Data`'s : only contains a type identifier and a value
    (may be simply represented by two words)
-
-   Structures are not explicit, we only have pointers
+ * Structures are declared, so that `Access` instructions can find a
+   specific value from a structure
  * No nested expressions : code is composed of blocs, control structures
    and declarations
 
@@ -28,10 +28,8 @@ A language where :
 
 This language is _not_ typed : everything is `Data`.
 
-This means it is not memory safe !
-
-This language is used to deconstruct Petit Julia's types and to make
-explicit all type casts.
+This language is used to deconstruct Petit Julia's nested expressions
+and to make explicit all type casts.
 
 ## LIR
 
