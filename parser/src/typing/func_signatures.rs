@@ -1,9 +1,5 @@
 use crate::ast::{StaticType, Function};
-use super::data::FuncSignature;
-
-pub fn is_compatible(a: StaticType, b: StaticType) -> bool {
-    a == StaticType::Any || b == StaticType::Any || a == b
-}
+use super::data::{FuncSignature, is_compatible};
 
 pub fn match_score(a: &StaticType, b: &StaticType) -> i32 {
     if *a == *b {
@@ -15,7 +11,7 @@ pub fn match_score(a: &StaticType, b: &StaticType) -> i32 {
     }
 }
 
-/*pub fn is_this_call_ambiguous(args: Vec<StaticType>, functions: &Vec<FuncSignature>) -> bool {
+pub fn is_this_call_ambiguous(args: Vec<StaticType>, functions: &Vec<FuncSignature>) -> bool {
     // Functions cannot be empty.
     let weights: Vec<i32> = functions.iter()
         .filter(|sig| is_callable_with(&args, sig))
@@ -32,18 +28,18 @@ pub fn compute_selectivity_weight(params: &Vec<StaticType>, target_sig: &FuncSig
     params
         .iter()
         .zip(target_sig.1.iter())
-        .map(|(param_ty, target_ty)| match_score(*param_ty, target_ty.as_ref()))
+        .map(|(param_ty, target_ty)| match_score(param_ty, target_ty))
         .sum()
 }
 
 // Test if a certain set of StaticType match another signature.
 // Useful for ambiguity and duplication detection.
-pub fn is_callable_with(params: &Vec<&StaticType>, target_sig: &FuncSignature) -> bool {
+pub fn is_callable_with(params: &Vec<StaticType>, target_sig: &FuncSignature) -> bool {
     params
         .into_iter()
         .zip(target_sig.1.iter())
-        .all(|(param_ty, target_type)| is_compatible(*param_ty, target_type.as_ref()))
-}*/
+        .all(|(param_ty, target_type)| is_compatible(param_ty.clone(), target_type.clone()))
+}
 
 pub fn is_callable_with_exactly(params: Vec<StaticType>, target_sig: &FuncSignature) -> bool {
     params

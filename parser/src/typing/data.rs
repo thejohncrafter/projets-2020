@@ -7,21 +7,15 @@ use automata::read_error::ReadError;
 pub type ReturnVerification<'a> = Result<(), ReadError<'a>>;
 pub type FuncSignature = (StaticType, Vec<StaticType>);
 
+pub fn is_compatible(a: StaticType, b: StaticType) -> bool {
+    a == StaticType::Any || b == StaticType::Any || a == b
+}
+
 #[derive(Debug)]
 pub struct TypedDecls<'a> {
     pub functions: HashMap<String, Vec<Function<'a>>>,
     pub structures: HashMap<String, Structure<'a>>,
     pub global_expressions: Vec<Exp<'a>>
-}
-
-impl<'a> TypedDecls<'a> {
-    pub fn from_global_environment(ges: GlobalEnvironmentState<'a>) -> Self {
-        TypedDecls {
-            functions: ges.functions,
-            structures: ges.structures,
-            global_expressions: ges.global_expressions
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -62,6 +56,24 @@ pub struct TypingContext<'a> {
 }
 
 impl<'a> TypingContext<'a> {
+    pub fn field_exist_in(&self, structure_type: &StaticType, field_name: &String) -> bool {
+        match structure_type {
+            StaticType::Any => true,
+            StaticType::Nothing | StaticType::Int64 | StaticType::Str | StaticType::Bool  => false,
+            StaticType::Struct(s) => self.structures[s].fields.iter().any(|p| &p.name.name == field_name)
+        }
+    }
+
+    pub fn get_potentially_unique_return_type_for_function(&self, name: &String) -> Option<StaticType> {
+        match self.functions.get(name) {
+            None => None,
+            Some(list_of_matches) => match list_of_matches.len() > 1 {
+                true => None,
+                false => Some(list_of_matches.first().unwrap().0.clone())
+            }
+        }
+    }
+
     pub fn push_to_env(&mut self, ident: &LocatedIdent<'a>, ty: StaticType) {
         self.environment
             .entry(ident.name.clone())
@@ -88,12 +100,20 @@ impl<'a> TypingContext<'a> {
 }
 
 pub type InternalTypingResult<'a> = Result<(), ReadError<'a>>;
+pub type PartialTypingResult<'a> = Result<StaticType, ReadError<'a>>;
 
 pub type TypingResult<'a> = Result<TypedDecls<'a>, ReadError<'a>>;
 
-pub type ElseTypingResult<'a> = Result<Option<StaticType>, ReadError<'a>>;
+pub type ElseTypingResult<'a> = Result<StaticType, ReadError<'a>>;
 pub type ExprTypingResult<'a> = Result<(), ReadError<'a>>;
 pub type BlockTypingResult<'a> = Result<(), ReadError<'a>>;
+
+pub fn is_builtin_function(name: &String) -> bool {
+    match name.as_str() {
+        "println" | "div" | "print" => true,
+        _ => false
+    }
+}
 
 pub fn convert_to_static_type(p: Option<&LocatedIdent>) -> Option<StaticType> {
     match p {

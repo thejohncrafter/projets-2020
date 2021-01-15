@@ -16,7 +16,7 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
     let mut global_state: GlobalEnvironmentState<'a> = GlobalEnvironmentState::init();
     // Walk over declarations for phase 1-typing.
     for decl in decls {
-        global_state.visit_decl(&decl)?;
+        global_state.visit_decl(decl)?; // It will consume decl forever.
     }
 
     // Prepare for the global environment.
@@ -40,10 +40,8 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
         environment
     };
 
-    let mut global_expressions = global_state.global_expressions;
-
     //  If it's an expression, type the expr in the global environment.
-    for expr in &mut global_expressions {
+    for expr in &mut global_state.global_expressions {
         type_expression(&mut global_ctx, expr)?;
     }
 
@@ -98,5 +96,9 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
 
 
     // Returns the enriched declarations.
-    Ok(TypedDecls::from_global_environment(global_state))
+    Ok(TypedDecls {
+        functions: global_state.functions,
+        structures: global_ctx.structures,
+        global_expressions: global_state.global_expressions
+    })
 }

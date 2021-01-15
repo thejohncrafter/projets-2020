@@ -43,7 +43,7 @@ impl<'a> LValue<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum BinOp {
     Or,
     And,
@@ -64,11 +64,42 @@ pub enum BinOp {
     Pow,
 }
 
-#[derive(Debug)]
+impl fmt::Display for BinOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BinOp::Or => write!(f, "||"),
+            BinOp::And => write!(f, "&&"),
+            BinOp::Equ => write!(f, "=="),
+            BinOp::Neq => write!(f, "!="),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Leq => write!(f, "≤"),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Geq => write!(f, "≥"),
+            BinOp::Plus => write!(f, "+"),
+            BinOp::Minus => write!(f, "-"),
+            BinOp::Times => write!(f, "×"),
+            BinOp::Div => write!(f, "/"),
+            BinOp::Pow => write!(f, "^")
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,
 }
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "¬"),
+        }
+    }
+}
+
+
 
 #[derive(Debug)]
 pub struct Range<'a> {
