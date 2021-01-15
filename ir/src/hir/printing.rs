@@ -113,7 +113,7 @@ impl std::fmt::Display for Function {
         }
 
         writeln!(
-            f, "fn {}({}) {{",
+            f, "fn {}({})",
             self.name,
             self.args.iter().enumerate().map(|(i, arg)| if i == 0 {
                     format!("{}", arg)
@@ -121,6 +121,17 @@ impl std::fmt::Display for Function {
                     format!(", {}", arg)
                 }).collect::<String>()
         )?;
+
+        writeln!(
+            f, "    vars: {};",
+            self.vars.iter().enumerate().map(|(i, var)| if i == 0 {
+                    format!("{}", var)
+                } else {
+                    format!(", {}", var)
+                }).collect::<String>()
+        )?;
+
+        writeln!(f, "{{")?;
 
         print_block(f, 1, &self.body)?;
 

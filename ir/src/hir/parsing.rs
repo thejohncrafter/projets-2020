@@ -154,6 +154,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             string: String,
 
             FN: (),
+            VARS: (),
             JUMP: (),
             JUMPIF: (),
             CALL: (),
@@ -203,6 +204,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             ident_list: Vec<String>,
             val_list: Vec<Val>,
             function_head: (String, Vec<String>),
+            vars_list: Vec<String>,
             statements_list: Vec<Statement>,
 
             function: Function,
@@ -224,6 +226,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                         Token::Ident(name) => {
                             match name.as_str() {
                                 "fn" => $FN(()),
+                                "vars" => $VARS(()),
                                 "jump" => $JUMP(()),
                                 "jumpif" => $JUMPIF(()),
                                 "call" => $CALL(()),
@@ -322,6 +325,13 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(($id, $vars))
             },
 
+            (vars_list -> VARS COLON SEMICOLON) => {
+                Ok(vec!())
+            },
+            (vars_list -> VARS COLON vars:ident_list SEMICOLON) => {
+                Ok($vars)
+            },
+
             (statements_list -> s:statement) => {
                 Ok(vec!($s))
             },
@@ -338,8 +348,8 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Block::new($l))
             },
 
-            (function -> h:function_head b:block) => {
-                Ok(Function::new($h.0, $h.1, $b))
+            (function -> h:function_head vars:vars_list b:block) => {
+                Ok(Function::new($h.0, $h.1, $vars, $b))
             },
 
             (statement -> dest:ident ARROW c:callable SEMICOLON) => {

@@ -50,12 +50,13 @@ impl Block {
 pub struct Function {
     pub name: String,
     pub args: Vec<String>,
+    pub vars: Vec<String>,
     pub body: Block,
 }
 
 impl Function {
-    pub fn new(name: String, args: Vec<String>, body: Block) -> Self {
-        Function {name, args, body}
+    pub fn new(name: String, args: Vec<String>, vars: Vec<String>, body: Block) -> Self {
+        Function {name, args, vars, body}
     }
 }
 

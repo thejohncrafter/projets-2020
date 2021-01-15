@@ -1,5 +1,7 @@
 
-fn main(a, b) {
+fn main(a, b)
+    vars: a, b, c;
+{
     c <- a && b;
     if c {
         c <- a;
