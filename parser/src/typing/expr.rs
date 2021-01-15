@@ -2,6 +2,16 @@ use std::collections::HashSet;
 use super::data::*;
 use crate::ast::*;
 
+impl<'a> TypingContext<'a> {
+    pub fn type_expression(expr: Exp<'a>) -> InternalTypingResult {
+        Ok(())
+    }
+
+    pub fn type_block(exprs: Vec<Exp<'a>>) -> InternalTypingResult {
+        Ok(())
+    }
+}
+
 fn is_any_or<'a>(alpha: &'a Exp<'a>, t: StaticType) -> bool {
     return alpha.static_ty == Some(StaticType::Any) || alpha.static_ty == Some(t);
 }

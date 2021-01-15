@@ -4,81 +4,8 @@ use crate::ast::*;
 
 use automata::read_error::ReadError;
 
-pub fn is_compatible(alpha: Option<&StaticType>, beta: Option<&StaticType>) -> bool {
-    match (alpha, beta) {
-        (None, _) | (_, None) => true,
-        (Some(a), Some(b)) => *a == StaticType::Any || *b == StaticType::Any || *a == *b
-    }
-}
-
-pub fn compatibility_value(alpha: Option<&StaticType>, beta: Option<&StaticType>) -> i32 {
-    match (alpha, beta) {
-        (None, None) => 1,
-        (None, _) | (_, None) => 0,
-        (Some(a), Some(b)) => {
-            if *a == *b {
-                1
-            } else if *a == StaticType::Any {
-                0
-            } else if *b == StaticType::Any {
-                0
-            } else {
-                -1
-            }
-        }
-    }
-}
-
 pub type ReturnVerification<'a> = Result<(), ReadError<'a>>;
-pub type FuncSignature = (Option<StaticType>, Vec<Option<StaticType>>);
-
-pub fn is_this_call_ambiguous(args: Vec<Option<&StaticType>>, functions: &Vec<FuncSignature>) -> bool {
-    // Functions cannot be empty.
-    let weights: Vec<i32> = functions.iter()
-        .filter(|sig| is_callable_with(&args, sig))
-        .map(|sig| compute_selectivity_weight(&args, sig))
-        .collect();
-    let optimal_call_weight = weights.iter().max().unwrap();
-
-    println!("Ambiguous detection, here's the weights: {:?}", weights);
-
-    optimal_call_weight > &0 && weights.iter().filter(|w| w == &optimal_call_weight).count() > 1
-}
-
-pub fn compute_selectivity_weight(params: &Vec<Option<&StaticType>>, target_sig: &FuncSignature) -> i32 {
-    params
-        .iter()
-        .zip(target_sig.1.iter())
-        .map(|(param_ty, target_ty)| compatibility_value(*param_ty, target_ty.as_ref()))
-        .sum()
-}
-
-// Test if a certain set of StaticType match another signature.
-// Useful for ambiguity and duplication detection.
-pub fn is_callable_with(params: &Vec<Option<&StaticType>>, target_sig: &FuncSignature) -> bool {
-    params
-        .into_iter()
-        .zip(target_sig.1.iter())
-        .all(|(param_ty, target_type)| is_compatible(*param_ty, target_type.as_ref()))
-}
-
-pub fn is_callable_with_exactly(params: Vec<Option<StaticType>>, target_sig: &FuncSignature) -> bool {
-    params
-        .iter()
-        .zip(target_sig.1.iter())
-        .all(|(param_ty, target_type)| compatibility_value(param_ty.as_ref(), target_type.as_ref()) == 1)
-}
-
-pub fn build_signature(f: &Function) -> FuncSignature {
-    let (ret, mut params): FuncSignature = (
-        convert_to_static_type(f.ret_ty.as_ref()), vec![]);
-
-    for param in &f.params {
-        params.push(convert_to_static_type(param.ty.as_ref()));
-    }
-
-    (ret, params)
-}
+pub type FuncSignature = (StaticType, Vec<StaticType>);
 
 #[derive(Debug)]
 pub struct TypedDecls<'a> {
@@ -87,15 +14,80 @@ pub struct TypedDecls<'a> {
     pub global_expressions: Vec<Exp<'a>>
 }
 
+impl<'a> TypedDecls<'a> {
+    pub fn from_global_environment(ges: GlobalEnvironmentState<'a>) -> Self {
+        TypedDecls {
+            functions: ges.functions,
+            structures: ges.structures,
+            global_expressions: ges.global_expressions
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GlobalEnvironmentState<'a> {
+    pub structures: HashMap<String, Structure<'a>>,
+    pub functions: HashMap<String, Vec<Function<'a>>>,
+    pub function_sigs: HashMap<String, Vec<FuncSignature>>,
+    pub all_structure_fields: HashMap<String, StaticType>,
+    pub all_mutable_fields: HashSet<String>,
+    pub global_variables: HashSet<String>,
+    pub global_expressions: Vec<Exp<'a>>,
+    pub known_types: HashSet<StaticType>,
+}
+
+impl<'a> GlobalEnvironmentState<'a> {
+    pub fn init() -> Self {
+        GlobalEnvironmentState {
+            structures: HashMap::new(),
+            functions: HashMap::new(),
+            function_sigs: HashMap::new(),
+            all_structure_fields: HashMap::new(),
+            all_mutable_fields: HashSet::new(),
+            global_variables: HashSet::new(),
+            global_expressions: vec![],
+            known_types: HashSet::new()
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TypingContext<'a> {
     pub functions: HashMap<String, Vec<FuncSignature>>,
     pub structures: HashMap<String, Structure<'a>>,
-    pub known_types: HashSet<String>,
+    pub known_types: HashSet<StaticType>,
     pub mutable_fields: HashSet<String>,
-    pub all_fields: HashMap<String, Option<StaticType>>,
-    pub environment: HashMap<String, Vec<Option<StaticType>>>
+    pub all_fields: HashMap<String, StaticType>,
+    pub environment: HashMap<String, Vec<StaticType>>
 }
+
+impl<'a> TypingContext<'a> {
+    pub fn push_to_env(&mut self, ident: &LocatedIdent<'a>, ty: StaticType) {
+        self.environment
+            .entry(ident.name.clone())
+            .or_default()
+            .push(ty);
+    }
+
+    pub fn push_local_to_env(&mut self, ident: &LocatedIdent<'a>) {
+        self.push_to_env(&ident, StaticType::Any);
+    }
+
+    pub fn pop_from_env(&mut self, ident: &LocatedIdent<'a>) {
+        let types = self.environment.get_mut(&ident.name).unwrap();
+        types.pop();
+
+        if types.len() == 1 {
+            self.environment.remove(&ident.name);
+        }
+    }
+
+    pub fn is_alive_in_env(&self, ident: &LocatedIdent<'a>) -> bool {
+        self.environment.get(&ident.name).is_some()
+    }
+}
+
+pub type InternalTypingResult<'a> = Result<(), ReadError<'a>>;
 
 pub type TypingResult<'a> = Result<TypedDecls<'a>, ReadError<'a>>;
 

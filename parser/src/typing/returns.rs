@@ -2,21 +2,28 @@ use super::data::*;
 use crate::ast::*;
 use automata::line_counter::Span;
 
-fn verify_return_type<'a>(span: Span<'a>, found: Option<&Exp<'a>>, expected: &StaticType) -> ReturnVerification<'a> {
-    if found.is_none() && expected != &StaticType::Any && expected != &StaticType::Nothing {
-        return Err(
-            (span, format!("Mismatching return types, found nothing, expected: '{}'", expected).to_string()).into()
-        );
-    }
-
-    if !is_compatible(found.unwrap().static_ty.as_ref(), Some(expected)) {
-        Err(
-            (found.unwrap().span, format!("Mismatching return types, found: '{:?}', expected: '{}'", found.unwrap().static_ty, expected).to_string()).into()
-        )
-    } else {
-        Ok(())
+fn verify_return_type<'a>(span: Span<'a>, found: Option<&Exp<'a>>, expected: &StaticType) -> InternalTypingResult<'a> {
+    match found {
+        None => {
+            if expected != &StaticType::Any && expected != &StaticType::Nothing {
+                Err(
+                    (span, format!("Mismatching return types, found nothing, expected: '{}'", expected).to_string()).into()
+                )
+            } else { Ok(()) }
+        },
+        Some(expr) => {
+            if !is_compatible(expr.static_ty.as_ref(), expected) {
+                Err(
+                    (expr.span, format!("Mismatching return types, found: '{}', expected: '{}'", expr.static_ty, expected).to_string()).into()
+                )
+            } else {
+                Ok(())
+            }
+        }
     }
 }
+
+fn walk_returns<'a>(
 
 fn visit_returns<'a>(e: &Exp<'a>, expected: &StaticType) -> ReturnVerification<'a> {
     
