@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define TYPE_NOTHING 0
 #define TYPE_INT64 1
@@ -48,5 +49,15 @@ void native_print_string(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty, char*
     }
 
     printf("%s\n", val);
+}
+
+void native_pow(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty_1, int64_t val_1, uint64_t ty_2, int64_t val_2) {
+    if(ty_1 != TYPE_INT64 && ty_2 == TYPE_INT64) {
+        fprintf(stderr, "Expected two Int64 for pow.\n");
+        exit(1);
+    }
+
+    *ret_ty = TYPE_INT64;
+    *ret_val = pow(val_1, val_2);
 }
 

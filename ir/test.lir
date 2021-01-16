@@ -12,8 +12,12 @@ not_zero:
 }
 
 fn main() {
-    call print_string("fact :");
+    call native native_print_string(3, "fact :");
     (a, _) <- call fact(5);
-    call print_int(a);
+    call native native_print_int(1, a);
+
+    call native native_print_string(3, "pow :");
+    (a, _) <- call native native_pow(1, 2, 1, 6);
+    call native native_print_int(1, a);
 }
 

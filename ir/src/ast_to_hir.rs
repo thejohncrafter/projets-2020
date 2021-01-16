@@ -80,9 +80,7 @@ impl Emitter {
                         hir::Callable::Bin(op, val_a, val_b)
                     },
                     Soft(fn_name) => {
-                        // FIXME(Julien): use something like NativeCall
-                        // hir::Callable::Call(fn_name, vec!(val_a, val_b))
-                        todo!()
+                        hir::Callable::Call(fn_name, true, vec!(val_a, val_b))
                     },
                 };
 

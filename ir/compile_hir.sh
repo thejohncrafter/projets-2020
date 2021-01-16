@@ -4,5 +4,5 @@
 cargo run -p ir hir ir/test.hir -o ir/target/test.s &&
 as ir/target/test.s -o ir/target/test.o &&
 gcc -c ir/runtime.c -o ir/target/runtime.o &&
-gcc -no-pie ir/target/test.o ir/target/runtime.o -o ir/target/test
+gcc -no-pie ir/target/test.o ir/target/runtime.o -o ir/target/test -lm
 
