@@ -16,15 +16,17 @@ pub type HIRDeclsResult = Result<Vec<hir::Decl>, Error>;
 
 struct Emitter {
     pub next_intermediate_variable_id: u64,
+    pub current_local_vars: Vec<String>
 }
 
 impl Emitter {
     fn init() -> Self {
-        Emitter { next_intermediate_variable_id: 0 }
+        Emitter { next_intermediate_variable_id: 0, current_local_vars: vec![] }
     }
 
     fn mk_intermediate_var(&mut self) -> String {
         let out = format!("__intermediate_internal{}", self.next_intermediate_variable_id);
+        self.current_local_vars.push(out.clone());
         self.next_intermediate_variable_id += 1;
         out
     }
@@ -260,22 +262,25 @@ impl Emitter {
     }
 
     fn emit_fn(&mut self, f: &Function, name: String) -> HIRFunctionResult {
+        // Reset the counters and local state.
+        self.current_local_vars.clear();
+        self.next_intermediate_variable_id = 0;
+
+        let block = self.emit_block(&f.body)?;
+
         Ok(hir::Function::new(
             name,
             f.params.iter().map(|f| f.name.name.clone()).collect(),
-            vec![], // FIXME: collect all assigns.
-            self.emit_block(&f.body)?
+            self.current_local_vars.drain(..).collect(), // FIXME: collect all assigns.
+            block
         ))
     }
 
     fn emit_dynamic_dispatch(&mut self, name: &String, f_s: &Vec<Function>) -> HIRDeclsResult {
-        // Reset the counter.
-        self.next_intermediate_variable_id = 0;
         if f_s.len() > 1 {
             let mut functions = vec![];
             for (index, f) in f_s.iter().enumerate() {
                 functions.push(hir::Decl::Function(self.emit_fn(f, format!("{}_{}", name, index).to_string())?));
-                self.next_intermediate_variable_id = 0;
             }
 
             // now the dynamic dispatch thunk
