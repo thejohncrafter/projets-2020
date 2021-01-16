@@ -46,7 +46,7 @@ enum Token {
     Punct(Punct),
 }
 
-pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Function>, ReadError<'a>> {
+pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, ReadError<'a>> {
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
@@ -153,7 +153,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             uint: u64,
             string: String,
 
+            GLOBALS: (),
             FN: (),
+            VARS: (),
             JUMP: (),
             JUMPIF: (),
             CALL: (),
@@ -190,13 +192,15 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             NOT: (),
         ]
         nterms: [
-            functions_list: Vec<Function>,
-
             ident_list: Vec<String>,
             val_list: Vec<Val>,
             function_head: (String, Vec<String>),
+            vars_list: Vec<String>,
             call_head: bool,
+            globals: Vec<String>,
+            functions_list: Vec<Function>,
 
+            source: Source,
             function: Function,
             block: Vec<Statement>,
             statement: Statement,
@@ -214,7 +218,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                     let token = match x {
                         Token::Ident(name) => {
                             match name.as_str() {
+                                "globals" => $GLOBALS(()),
                                 "fn" => $FN(()),
+                                "vars" => $VARS(()),
                                 "jump" => $JUMP(()),
                                 "jumpif" => $JUMPIF(()),
                                 "call" => $CALL(()),
@@ -269,15 +275,6 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         }
 
         rules: {
-            (functions_list -> f:function) => {
-                Ok(vec!($f))
-            },
-            (functions_list -> v:functions_list f:function) => {
-                let mut v = $v;
-                v.push($f);
-                Ok(v)
-            },
-
             (ident_list -> id:ident) => {
                 Ok(vec!($id))
             },
@@ -303,14 +300,44 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(($id, $vars))
             },
 
+            (vars_list -> VARS COLON SEMICOLON) => {
+                Ok(vec!())
+            },
+            (vars_list -> VARS COLON vars:ident_list SEMICOLON) => {
+                Ok($vars)
+            },
+
             (call_head -> CALL) => {Ok(false)},
             (call_head -> CALL NATIVE) => {Ok(true)},
 
-            (function -> head:function_head LBRACKET RBRACKET) => {
-                Ok(Function::new($head.0, $head.1, Block::new(vec!())))
+            (globals -> GLOBALS COLON SEMICOLON) => {
+                Ok(vec!())
             },
-            (function -> head:function_head LBRACKET body:block RBRACKET) => {
-                Ok(Function::new($head.0, $head.1, Block::new($body)))
+            (globals -> GLOBALS COLON v:ident_list SEMICOLON) => {
+                Ok($v)
+            },
+
+            (functions_list -> f:function) => {
+                Ok(vec!($f))
+            },
+            (functions_list -> v:functions_list f:function) => {
+                let mut v = $v;
+                v.push($f);
+                Ok(v)
+            },
+
+            (source -> globals:globals) => {
+                Ok(Source::new($globals, vec!()))
+            },
+            (source -> globals:globals v:functions_list) => {
+                Ok(Source::new($globals, $v))
+            },
+
+            (function -> head:function_head vars:vars_list LBRACKET RBRACKET) => {
+                Ok(Function::new($head.0, $head.1, $vars, Block::new(vec!())))
+            },
+            (function -> head:function_head vars:vars_list LBRACKET body:block RBRACKET) => {
+                Ok(Function::new($head.0, $head.1, $vars, Block::new($body)))
             },
 
             (block -> s:statement) => {
@@ -355,7 +382,6 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (statement_semi -> JUMPIF NOT cond:val l:ident) => {
                 Ok(Statement::Inst(Instruction::JumpifNot($cond, Label::new($l))))
             },
-
 
             (statement_semi -> native:call_head f:ident LPAR RPAR) => {
                 Ok(Statement::Inst(Instruction::Call(None, $native, $f, vec!())))
@@ -404,7 +430,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
         }
 
         on_empty: {Err("Expected a program".to_string())}
-        start: functions_list
+        start: source
     };
 
     res

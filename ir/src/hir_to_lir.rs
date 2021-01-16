@@ -86,20 +86,52 @@ impl StructData {
     }
 }
 
+struct VarData {
+    val_name: String,
+    ty_name: String,
+}
+
+impl VarData {
+    fn new(id: usize, is_global: bool) -> Self {
+        let prefix = if is_global {"global_"} else {""};
+        VarData {
+            val_name: format!("{}var_{}_val", prefix, id),
+            ty_name: format!("{}var_{}_ty", prefix, id),
+        }
+    }
+}
+
 struct GlobalRegistry {
-    map: HashMap<String, StructData>,
+    globals_map: HashMap<String, VarData>,
+    structs_map: HashMap<String, StructData>,
     fn_map: HashMap<String, usize>,
 }
 
 impl GlobalRegistry {
-    fn new(vars: &[&hir::StructDecl], fns: &[&str]) -> Self {
+    fn new(globals: &[String], vars: &[&hir::StructDecl], fns: &[&str]) -> Self {
         GlobalRegistry {
-            map: vars.iter().enumerate()
+            globals_map: globals.iter().enumerate()
+                .map(|(i, v)| (v.clone(), VarData::new(i, true)))
+                .collect(),
+            structs_map: vars.iter().enumerate()
                 .map(|(i, d)| (d.name.clone(), StructData::new(d.name.clone(), i as u64, d)))
                 .collect(),
             fn_map: fns.iter().enumerate()
                 .map(|(i, name)| (name.to_string(), i))
                 .collect(),
+        }
+    }
+
+    fn compiled_var_names(&self) -> Vec<String> {
+        self.globals_map.values()
+            .map(|data| vec!(data.ty_name.clone(), data.val_name.clone()))
+            .flatten().collect()
+    }
+
+    fn get_var(&self, name: &str) -> Result<&VarData, Error> {
+        match self.globals_map.get(name) {
+            Some(data) => Ok(data),
+            None => Err(format!("Variable \"{}\" was not declared", name).into()),
         }
     }
 
@@ -110,7 +142,7 @@ impl GlobalRegistry {
             ConcreteType::Bool => Ok(lir::Val::Const(2)),
             ConcreteType::Str => Ok(lir::Val::Const(3)),
             ConcreteType::Struct(name) => {
-                match self.map.get(name) {
+                match self.structs_map.get(name) {
                     Some(data) => Ok(lir::Val::Const(data.id + 4)),
                     None => Err(format!("Structure \"{}\" was not declared", name).into()),
                 }
@@ -119,7 +151,7 @@ impl GlobalRegistry {
     }
 
     fn get_struct(&self, name: &str) -> Result<&StructData, Error> {
-        match self.map.get(name) {
+        match self.structs_map.get(name) {
             Some(data) => Ok(data),
             None => Err(format!("Structure \"{}\" was not declared", name).into()),
         }
@@ -129,20 +161,6 @@ impl GlobalRegistry {
         match self.fn_map.get(name) {
             Some(id) => Ok(format!("usr_fn_{}", id)),
             None => Err(format!("No user function named \"{}\"", name).into())
-        }
-    }
-}
-
-struct VarData {
-    val_name: String,
-    ty_name: String,
-}
-
-impl VarData {
-    fn new(id: usize) -> Self {
-        VarData {
-            val_name: format!("var_{}_val", id),
-            ty_name: format!("var_{}_ty", id),
         }
     }
 }
@@ -168,9 +186,15 @@ impl<'a> LocalRegistry<'a> {
         LocalRegistry {
             parent,
             map: vars.iter().enumerate()
-                .map(|(i, v)| (v.clone(), VarData::new(i)))
+                .map(|(i, v)| (v.clone(), VarData::new(i, false)))
                 .collect(),
         }
+    }
+
+    fn compiled_var_names(&self) -> Vec<String> {
+        self.map.values()
+            .map(|data| vec!(data.ty_name.clone(), data.val_name.clone()))
+            .flatten().collect()
     }
 
     fn compile_val(&self, val: &hir::Val) -> Result<CompiledVal, Error> {
@@ -206,7 +230,7 @@ impl<'a> LocalRegistry<'a> {
     fn get_var(&self, name: &str) -> Result<&VarData, Error> {
         match self.map.get(name) {
             Some(data) => Ok(data),
-            None => Err(format!("Variable \"{}\" was not declared", name).into()),
+            None => self.parent.get_var(name),
         }
     }
 }
@@ -303,7 +327,7 @@ fn compile_call(
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
                     local.get_var(dest)?.val_name.clone(),
-                    local.compile_val(a)?.ty,
+                    local.compile_val(a)?.val,
                 )
             ));
         },
@@ -472,32 +496,33 @@ fn compile_fn(
     Ok(lir::Function::new(
         global.get_fn_compiled_name(&f.name)?,
         lir_args,
+        local.compiled_var_names(),
         lir::Block::new(body),
     ))
 }
 
-pub fn hir_to_lir(hir: &[hir::Decl]) -> Result<Vec<lir::Function>, Error> {
+pub fn hir_to_lir(hir: &hir::Source) -> Result<lir::Source, Error> {
     let mut compiled = Vec::new();
 
-    let structs = hir.iter().filter_map(|d| {
+    let structs = hir.decls.iter().filter_map(|d| {
             match d {
                 hir::Decl::Struct(s) => Some(s),
                 _ => None
             }
         }).collect::<Vec<_>>();
 
-    let functions = hir.iter().filter_map(|d| {
+    let functions = hir.decls.iter().filter_map(|d| {
             match d {
                 hir::Decl::Function(decl) => Some(decl.name.as_str()),
                 _ => None
             }
         }).collect::<Vec<_>>();
 
-    let global = GlobalRegistry::new(&structs, &functions);
+    let global = GlobalRegistry::new(&hir.globals, &structs, &functions);
 
-    let main_fn = match hir.iter().find_map(|d| {
+    let main_fn = match hir.decls.iter().find_map(|d| {
             match d {
-                hir::Decl::Function(f) => Some(f),
+                hir::Decl::Function(f) if f.name == "main" => Some(f),
                 _ => None
             }
         })
@@ -506,7 +531,7 @@ pub fn hir_to_lir(hir: &[hir::Decl]) -> Result<Vec<lir::Function>, Error> {
         None => Err("No \"main\" function".to_string())?
     };
 
-    hir.iter().try_for_each(|d| -> Result<(), Error> {
+    hir.decls.iter().try_for_each(|d| -> Result<(), Error> {
             match d {
                 hir::Decl::Struct(_) => (),
                 hir::Decl::Function(f) => compiled.push(compile_fn(&global, f)?),
@@ -517,6 +542,7 @@ pub fn hir_to_lir(hir: &[hir::Decl]) -> Result<Vec<lir::Function>, Error> {
     compiled.push(lir::Function::new(
         "main".to_string(),
         vec!(),
+        vec!("ret_code_ty".to_string(), "ret_code_val".to_string()),
         lir::Block::new(vec!(
             lir::Statement::Inst(lir::Instruction::Call(
                     Some(("ret_code_ty".to_string(), "ret_code_val".to_string())),
@@ -531,6 +557,6 @@ pub fn hir_to_lir(hir: &[hir::Decl]) -> Result<Vec<lir::Function>, Error> {
         ))
     ));
 
-    Ok(compiled)
+    Ok(lir::Source::new(global.compiled_var_names(), compiled))
 }
 

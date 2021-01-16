@@ -1,4 +1,6 @@
 
+globals: test_var;
+
 fn fact(n)
     vars: cond, n, m, val;
 {
@@ -15,12 +17,21 @@ fn fact(n)
     return val;
 }
 
+fn print_test_var()
+    vars: _;
+{
+    _ <- call native print_int(test_var);
+}
+
 fn main()
     vars: n, _;
 {
     _ <- call native print_string("Hello world !");
-    n <- call fact((Int64, 5));
-    _ <- call native print_int(n);
+    test_var <- call fact((Int64, 5));
+    _ <- call print_test_var();
+    
+    test_var <- call fact((Int64, 4));
+    _ <- call print_test_var();
 
     return (Int64, 0);
 }

@@ -1,5 +1,9 @@
 
-fn fact(n) {
+globals: test_val;
+
+fn fact(n)
+    vars: n, not_zero, k, prev, val;
+{
     not_zero <- n != 0;
     jumpif not_zero not_zero;
 zero:
@@ -11,13 +15,21 @@ not_zero:
     return val, 0;
 }
 
-fn main() {
+fn print_test_val()
+    vars: _;
+{
+    (_, _) <- call native native_print_int(1, test_val);
+}
+
+fn main()
+    vars: a, _;
+{
     call native native_print_string(3, "fact :");
     (a, _) <- call fact(5);
     call native native_print_int(1, a);
 
     call native native_print_string(3, "pow :");
-    (a, _) <- call native native_pow(1, 2, 1, 6);
+    (test_val, _) <- call native native_pow(1, 2, 1, 6);
     call native native_print_int(1, a);
 }
 

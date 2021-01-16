@@ -5,95 +5,68 @@ use std::fmt::Write;
 use super::lir::types::*;
 use super::error::*;
 
-fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>) {
+struct GlobalRegistry {
+    var_ids: HashMap<String, usize>,
+}
+
+impl GlobalRegistry {
+    fn new(vars: &[String]) -> Self {
+        GlobalRegistry {
+            var_ids: vars.iter().enumerate()
+                .map(|(i, v)| (v.clone(), i))
+                .collect(),
+        }
+    }
+
+    fn get_var_access(&self, name: &str) -> Result<String, Error> {
+        match self.var_ids.get(name) {
+            Some(i) => Ok(format!("(global_var_{})", i)),
+            None => Err(format!("Variable {} was not declared", name).into())
+        }
+    }
+
+    fn compile_vars_decls(&self, asm: &mut String) -> Result<(), Error> {
+        self.var_ids.values().try_for_each(|id| -> Result<(), Error> {
+                writeln!(asm, "global_var_{}:", id)?;
+                writeln!(asm, "\t.quad 0")?;
+                Ok(())
+            })?;
+        Ok(())
+    }
+}
+
+fn extract_labels(f: &Function) -> HashMap<String, usize> {
     struct Receiver {
-        var_map: HashMap<String, usize>,
-        next_var_id: usize,
-        label_map: HashMap<String, usize>,
-        next_label_id: usize,
+        map: HashMap<String, usize>,
+        next_id: usize,
     }
 
     impl Receiver {
         fn new() -> Self {
             Receiver {
-                var_map: HashMap::new(),
-                next_var_id: 0,
-                label_map: HashMap::new(),
-                next_label_id: 0,
-            }
-        }
-
-        fn recv_name(&mut self, name: &String) {
-            if !self.var_map.contains_key(name) {
-                self.var_map.insert(name.clone(), self.next_var_id);
-                self.next_var_id += 1;
-            }
-        }
-
-        fn recv(&mut self, v: &Val) {
-            match v {
-                Val::Var(name) => {
-                    self.recv_name(name)
-                },
-                _ => ()
+                map: HashMap::new(),
+                next_id: 0,
             }
         }
 
         fn recv_label(&mut self, label: &String) {
-            if !self.label_map.contains_key(label) {
-                self.label_map.insert(label.clone(), self.next_label_id);
-                self.next_label_id += 1;
+            if !self.map.contains_key(label) {
+                self.map.insert(label.clone(), self.next_id);
+                self.next_id += 1;
             }
         }
     }
 
     let mut recv = Receiver::new();
 
-    f.args.iter().for_each(|arg| recv.recv_name(arg));
     f.body.stmts.iter().for_each(|stmt| match stmt {
-            Statement::Inst(inst) => {
-                match inst {
-                    Instruction::Bin(dest, _, a, b) => {
-                        recv.recv_name(dest);
-                        recv.recv(a); recv.recv(b);
-                    },
-                    Instruction::Unary(dest, _, a) => {
-                        recv.recv_name(dest);
-                        recv.recv(a);
-                    },
-                    Instruction::Mov(dest, a) => {
-                        recv.recv_name(dest);
-                        recv.recv(a);
-                    },
-                    Instruction::Access(dest, a, _) => {
-                        recv.recv_name(dest);
-                        recv.recv(a);
-                    },
-                    Instruction::Jump(_) => (),
-                    Instruction::Jumpif(a, _) => {
-                        recv.recv(a);
-                    },
-                    Instruction::JumpifNot(a, _) => {
-                        recv.recv(a);
-                    },
-                    Instruction::Call(dest, _, _, v) => {
-                        if let Some((dest1, dest2)) = dest {
-                            recv.recv_name(dest1);
-                            recv.recv_name(dest2);
-                        }
-                        v.iter().for_each(|a| recv.recv(a));
-                    },
-                    Instruction::Return(a, b) => {
-                        recv.recv(a); recv.recv(b);
-                    }
-                }
-            },
             Statement::Label(label) => {
                 recv.recv_label(&label.name)
             },
+            _ => ()
         });
 
-    (recv.var_map, recv.label_map)
+    recv.map
 }
 
 struct StringRegistry {
@@ -120,16 +93,47 @@ impl StringRegistry {
     }
 }
 
+struct LocalRegistry<'a> {
+    parent: &'a GlobalRegistry,
+    map: HashMap<String, usize>,
+}
+
+impl<'a> LocalRegistry<'a> {
+    fn new(parent: &'a GlobalRegistry, vars: &[String]) -> Self {
+        LocalRegistry {
+            parent,
+            map: vars.iter().enumerate()
+                .map(|(i, name)| (name.clone(), i))
+                .collect(),
+        }
+    }
+
+    fn get_var_count(&self) -> usize {
+        self.map.len()
+    }
+
+    fn get_var_access_with_extra(&self, stack_extra: usize, name: &str) -> Result<String, Error> {
+        match self.map.get(name) {
+            Some(i) => Ok(format!("{}(%rsp)", 8 * i + stack_extra)),
+            None => self.parent.get_var_access(name),
+        }
+    }
+
+    fn get_var_access(&self, name: &str) -> Result<String, Error> {
+        self.get_var_access_with_extra(0, name)
+    }
+}
+
 fn write_get_val(
     asm: &mut String,
     reg: &mut StringRegistry,
-    var_ids: &HashMap<String, usize>,
+    local: &LocalRegistry,
     val: &Val,
     dest: &str
 ) -> Result<(), Error> {
     match val {
         Val::Var(name) => {
-            writeln!(asm, "\tmovq {}(%rsp), {}", 8 * var_ids.get(name).unwrap(), dest)?
+            writeln!(asm, "\tmovq {}, {}", local.get_var_access(name)?, dest)?
         },
         Val::Const(i) => {
             writeln!(asm, "\tmovq ${}, {}", i, dest)?
@@ -148,14 +152,14 @@ fn inst_to_asm(
     reg: &mut StringRegistry,
     fn_ids: &HashMap<String, usize>,
     label_ids: &HashMap<String, usize>,
-    var_ids: &HashMap<String, usize>,
+    local: &LocalRegistry,
     fn_id: usize,
     inst: &Instruction
 ) -> Result<(), Error> {
     match inst {
         Instruction::Bin(dest, op, a, b) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
-            write_get_val(asm, reg, var_ids, b, "%rbx")?;
+            write_get_val(asm, reg, local, a, "%rax")?;
+            write_get_val(asm, reg, local, b, "%rbx")?;
 
             match op {
                 BinOp::And => writeln!(asm, "\tandq %rbx, %rax")?,
@@ -201,10 +205,10 @@ fn inst_to_asm(
                 },
             }
 
-            writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
+            writeln!(asm, "\tmovq %rax, {}", local.get_var_access(dest)?)?;
         },
         Instruction::Unary(dest, op, a) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, local, a, "%rax")?;
 
             match op {
                 UnaryOp::Neg => {
@@ -216,21 +220,21 @@ fn inst_to_asm(
                 },
             }
 
-            writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
+            writeln!(asm, "\tmovq %rax, {}", local.get_var_access(dest)?)?;
         },
         Instruction::Mov(dest, a) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
-            writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
+            write_get_val(asm, reg, local, a, "%rax")?;
+            writeln!(asm, "\tmovq %rax, {}", local.get_var_access(dest)?)?;
         },
         Instruction::Access(dest, a, offset) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, local, a, "%rax")?;
             writeln!(asm, "\tmov %{}, {}(%rax)", dest, offset)?;
         },
         Instruction::Jump(label) => {
             writeln!(asm, "\tjmp fn_{}_lbl_{}", fn_id, label_ids.get(&label.name).unwrap())?;
         },
         Instruction::Jumpif(a, label) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, local, a, "%rax")?;
             writeln!(asm, "\tmovq $0, %rbx")?;
             writeln!(asm, "\tcmp %rax, %rbx")?;
             
@@ -241,7 +245,7 @@ fn inst_to_asm(
             }
         },
         Instruction::JumpifNot(a, label) => {
-            write_get_val(asm, reg, var_ids, a, "%rax")?;
+            write_get_val(asm, reg, local, a, "%rax")?;
             writeln!(asm, "\tmovq $0, %rbx")?;
             writeln!(asm, "\tcmp %rax, %rbx")?;
             
@@ -299,8 +303,8 @@ fn inst_to_asm(
                         },
                         UsrOrNative::Usr(Val::Var(name)) => {
                             writeln!(
-                                asm, "\tmovq {}(%rsp), %rax",
-                                8 * var_ids.get(name).unwrap() + stack_extra
+                                asm, "\tmovq {}, %rax",
+                                local.get_var_access_with_extra(stack_extra, name)?
                             )?;
                         },
                         UsrOrNative::Usr(Val::Const(i)) => {
@@ -349,13 +353,13 @@ fn inst_to_asm(
 
             if let Some((dest1, dest2)) = dest {
                 // Get the return values
-                writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest1).unwrap())?;
-                writeln!(asm, "\tmovq %rdx, {}(%rsp)", 8 * var_ids.get(dest2).unwrap())?;
+                writeln!(asm, "\tmovq %rax, {}", local.get_var_access(dest1)?)?;
+                writeln!(asm, "\tmovq %rdx, {}", local.get_var_access(dest2)?)?;
             }
         },
         Instruction::Return(u, v) => {
-            write_get_val(asm, reg, var_ids, u, "%rax")?;
-            write_get_val(asm, reg, var_ids, v, "%rdx")?;
+            write_get_val(asm, reg, local, u, "%rax")?;
+            write_get_val(asm, reg, local, v, "%rdx")?;
             writeln!(asm, "\tjmp fn_{}_exit", fn_id)?;
         },
     }
@@ -367,11 +371,13 @@ fn fn_to_asm(
     asm: &mut String,
     reg: &mut StringRegistry,
     fn_ids: &HashMap<String, usize>,
+    global: &GlobalRegistry,
     f: &Function,
     id: usize
 ) -> Result<(), Error> {
-    let (var_ids, label_ids) = extract_ids(f);
-    let var_count = var_ids.len();
+    let label_ids = extract_labels(f);
+    let local = LocalRegistry::new(global, &f.vars);
+    let var_count = local.get_var_count();
     let frame_size = 8 * if var_count % 2 == 0 {var_count} else {var_count + 1};
 
     // Declare function
@@ -397,14 +403,14 @@ fn fn_to_asm(
                     // and +2 because the two last elements on the stack store
                     // informations about the last frame)
             }
-            writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(arg).unwrap())?;
+            writeln!(asm, "\tmovq %rax, {}", local.get_var_access(arg)?)?;
             Ok(())
         })?;
 
     f.body.stmts.iter().try_for_each(|stmt| -> Result<(), Error> {
             match stmt {
                 Statement::Inst(inst) => {
-                    inst_to_asm(asm, reg, fn_ids, &label_ids, &var_ids, id, inst)
+                    inst_to_asm(asm, reg, fn_ids, &label_ids, &local, id, inst)
                 },
                 Statement::Label(label) => {
                     writeln!(asm, "fn_{}_lbl_{}:", id, label_ids.get(&label.name).unwrap())
@@ -422,13 +428,15 @@ fn fn_to_asm(
     Ok(())
 }
 
-pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
+pub fn lir_to_asm(source: &Source) -> Result<String, Error> {
     let mut s = String::new();
     let asm = &mut s;
+    
+    let global = GlobalRegistry::new(&source.globals);
     let mut fn_ids = HashMap::new();
     let mut reg = StringRegistry::new();
 
-    fns.iter().enumerate().try_for_each(|(i, f)| {
+    source.functions.iter().enumerate().try_for_each(|(i, f)| {
             if fn_ids.contains_key(&f.name) {
                 Err(format!("Function \"{}\" is not uniquely defined.", f.name))
             } else {
@@ -449,21 +457,19 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
     writeln!(asm, "\tmovq $0, %rax")?;
     writeln!(asm, "\tret")?;
 
-    fns.iter().enumerate().try_for_each(
-            |(i, f)| fn_to_asm(asm, &mut reg, &fn_ids, f, i)
+    source.functions.iter().enumerate().try_for_each(
+            |(i, f)| fn_to_asm(asm, &mut reg, &fn_ids, &global, f, i)
         )?;
 
     writeln!(asm, "\t.data")?;
-    writeln!(asm, "message_int:")?;
-    writeln!(asm, "\t.string \"%d\\n\"")?;
-    writeln!(asm, "message_string:")?;
-    writeln!(asm, "\t.string \"%s\\n\"")?;
 
     reg.strings.iter().enumerate().try_for_each(|(i, s)| -> Result<(), Error> {
             writeln!(asm, "string_{}:", i)?;
             writeln!(asm, "\t.string {:?}", s)?;
             Ok(())
         })?;
+
+    global.compile_vars_decls(asm)?;
 
     Ok(s)
 }

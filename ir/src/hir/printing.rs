@@ -40,8 +40,8 @@ impl std::fmt::Display for Callable {
             Callable::Call(fn_name, is_native, args) => {
                 writeln!(
                     f, "call{} {}({})",
-                    fn_name,
                     if *is_native {" native"} else {""},
+                    fn_name,
                     args.iter().enumerate().map(|(i, arg)| if i == 0 {
                             format!("{}", arg)
                         } else {
@@ -123,7 +123,7 @@ impl std::fmt::Display for Function {
                     Statement::If(v, b1, b2) => {
                         writeln!(f, "{:indent$}if {} {{", "", v, indent=(4*indent))?;
                         print_block(f, indent + 1, b1)?;
-                        writeln!(f, "{:indent$}}}else {{", "", indent=(4*indent))?;
+                        writeln!(f, "{:indent$}}} else {{", "", indent=(4*indent))?;
                         print_block(f, indent + 1, b2)?;
                         writeln!(f, "{:indent$}}}", "", indent=(4*indent))?;
                     },
@@ -196,3 +196,22 @@ impl std::fmt::Display for Decl {
         }
     }
 }
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f, "globals: {};",
+            self.globals.iter().enumerate()
+                .map(|(i, v)| if i == 0 {
+                    format!("{}", v)
+                } else {
+                    format!(", {}", v)
+                }).collect::<String>()
+        )?;
+
+        self.decls.iter().try_for_each(|d| writeln!(f, "{}", d))?;
+
+        Ok(())
+    }
+}
+

@@ -1,4 +1,3 @@
-use parser::ast as ast;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -102,5 +101,16 @@ impl StructDecl {
 pub enum Decl {
     Function(Function),
     Struct(StructDecl),
+}
+
+pub struct Source {
+    pub globals: Vec<String>,
+    pub decls: Vec<Decl>,
+}
+
+impl Source {
+    pub fn new(globals: Vec<String>, decls: Vec<Decl>) -> Self {
+        Source {globals, decls}
+    }
 }
 

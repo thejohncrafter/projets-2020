@@ -62,14 +62,12 @@ fn compile_hir(file_name: &str) -> Result<String, String> {
     };
 
     println!("** HIR **");
-    res.iter().for_each(|d| {
-            println!("{}", d);
-        });
+    println!("{}", res);
 
     println!();
     println!("** LIR **");
     let compiled = hir_to_lir(&res).map_err(|e| format!("{}", e))?;
-    compiled.iter().for_each(|f| println!("{}", f));
+    println!("{}", compiled);
  
     println!();
     println!("** asm **");   
@@ -89,9 +87,7 @@ fn compile_lir(file_name: &str) -> Result<String, String> {
     };
 
     println!("** LIR **");
-    res.iter().for_each(|f| {
-            println!("{}", f);
-        });
+    println!("{}", res);
 
     println!();
     println!("** asm **");

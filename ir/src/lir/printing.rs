@@ -106,7 +106,7 @@ impl std::fmt::Display for Instruction {
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
-            f, "fn {}({}) {{",
+            f, "fn {}({})",
             self.name,
             self.args.iter().enumerate().map(|(i, a)| if i == 0 {
                     a.clone()
@@ -114,6 +114,17 @@ impl std::fmt::Display for Function {
                     format!(", {}", a)
                 }).collect::<String>()
         )?;
+
+        writeln!(
+            f, "    vars: {};",
+            self.vars.iter().enumerate().map(|(i, var)| if i == 0 {
+                    format!("{}", var)
+                } else {
+                    format!(", {}", var)
+                }).collect::<String>()
+        )?;
+
+        writeln!(f, "{{")?;
 
         self.body.stmts.iter().try_for_each(|stmt| {
                 match stmt {
@@ -129,6 +140,24 @@ impl std::fmt::Display for Function {
             })?;
 
         writeln!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f, "globals: {};",
+            self.globals.iter().enumerate()
+                .map(|(i, v)| if i == 0 {
+                    format!("{}", v)
+                } else {
+                    format!(", {}", v)
+                }).collect::<String>()
+        )?;
+
+        self.functions.iter().try_for_each(|function| writeln!(f, "{}", function))?;
 
         Ok(())
     }

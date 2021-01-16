@@ -61,14 +61,26 @@ impl Block {
 pub struct Function {
     pub name: String,
     pub args: Vec<String>,
+    pub vars: Vec<String>,
     pub body: Block,
 }
 
 impl Function {
-    pub fn new(name: String, args: Vec<String>, body: Block) -> Self {
+    pub fn new(name: String, args: Vec<String>, vars: Vec<String>, body: Block) -> Self {
         Function {
-            name, args, body
+            name, args, vars, body
         }
+    }
+}
+
+pub struct Source {
+    pub globals: Vec<String>,
+    pub functions: Vec<Function>,
+}
+
+impl Source {
+    pub fn new(globals: Vec<String>, functions: Vec<Function>) -> Self {
+        Source {globals, functions}
     }
 }
 

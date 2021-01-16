@@ -47,7 +47,7 @@ enum Token {
     Punct(Punct),
 }
 
-pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>, ReadError<'a>> {
+pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, ReadError<'a>> {
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
@@ -155,6 +155,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             uint: u64,
             string: String,
 
+            GLOBALS: (),
             FN: (),
             VARS: (),
             CALL: (),
@@ -201,15 +202,16 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             STRUCT: (),
         ]
         nterms: [
-            decls_list: Vec<Decl>,
-
             ident_list: Vec<String>,
             val_list: Vec<Val>,
             function_head: (String, Vec<String>),
             vars_list: Vec<String>,
             statements_list: Vec<Statement>,
             call_head: bool,
+            globals: Vec<String>,
+            decls_list: Vec<Decl>,
 
+            source: Source,
             decl: Decl,
             structure: StructDecl,
             function: Function,
@@ -231,6 +233,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                     let token = match x {
                         Token::Ident(name) => {
                             match name.as_str() {
+                                "globals" => $GLOBALS(()),
                                 "fn" => $FN(()),
                                 "vars" => $VARS(()),
                                 "call" => $CALL(()),
@@ -297,15 +300,6 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
         }
 
         rules: {
-            (decls_list -> d:decl) => {
-                Ok(vec!($d))
-            },
-            (decls_list -> v:decls_list d:decl) => {
-                let mut v = $v;
-                v.push($d);
-                Ok(v)
-            },
-
             (ident_list -> id:ident) => {
                 Ok(vec!($id))
             },
@@ -349,6 +343,29 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
 
             (call_head -> CALL) => {Ok(false)},
             (call_head -> CALL NATIVE) => {Ok(true)},
+
+            (globals -> GLOBALS COLON SEMICOLON) => {
+                Ok(vec!())
+            },
+            (globals -> GLOBALS COLON v:ident_list SEMICOLON) => {
+                Ok($v)
+            },
+
+            (decls_list -> d:decl) => {
+                Ok(vec!($d))
+            },
+            (decls_list -> v:decls_list d:decl) => {
+                let mut v = $v;
+                v.push($d);
+                Ok(v)
+            },
+
+            (source -> globals:globals) => {
+                Ok(Source::new($globals, vec!()))
+            },
+            (source -> globals:globals v:decls_list) => {
+                Ok(Source::new($globals, $v))
+            },
 
             (decl -> s:structure) => {
                 Ok(Decl::Struct($s))
@@ -453,7 +470,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
         }
 
         on_empty: {Err("Expected a program".to_string())}
-        start: decls_list
+        start: source
     };
 
     res
