@@ -188,8 +188,45 @@ impl Emitter {
 
                 Ok((stmts, hir::Val::Var(out)))
             },
+            ExpVal::If(cond, then, else_) => {
+                // The value emitted by a if, is the value emitted by the then block or the else
+                // block.
+
+                let out = self.mk_intermediate_var();
+
+                let (mut stmts, cond_val) = self.emit_value(cond)?;
+                let (mut then_stmts, then_val) = self.emit_block_value(then)?;
+                let (mut else_stmts, else_val) = self.emit_else_value(else_)?;
+
+                then_stmts.push(
+                    hir::Statement::Call(
+                        out.clone(),
+                        hir::Callable::Assign(then_val)
+                    )
+                );
+
+                else_stmts.push(
+                    hir::Statement::Call(
+                        out.clone(),
+                        hir::Callable::Assign(else_val)
+                    )
+                );
+
+                // we want to write down if (cond) { then_stmts… out <- then_val; } else {
+                // else_stmts… out <- else_val; }
+                stmts.push(
+                    hir::Statement::If(
+                        cond_val,
+                        hir::Block::new(then_stmts),
+                        hir::Block::new(else_stmts)
+                     )
+                );
+
+
+                Ok((stmts, hir::Val::Var(out)))
+            }
             // FIXME(Ryan): verify we covered all cases.
-            _ => Ok((vec![], hir::Val::Var("I_AM_A_PLACEHOLDER_CHECK_ME_PLEASE".to_string())))
+            _ => Ok((vec![], hir::Val::Var(format!("I_AM_A_PLACEHOLDER_CHECK_ME_PLEASE: {:?}", e).to_string())))
         }
     }
 
@@ -212,7 +249,7 @@ impl Emitter {
 
                 stmts.push(hir::Statement::If(
                     val_cond,
-                    self.emit_block(&then)?,
+                    self.emit_block(&then, false)?,
                     self.emit_else_block(&else_)?
                 ));
 
@@ -240,7 +277,7 @@ impl Emitter {
                         val_end
                     ));
 
-                let mut body_block = self.emit_block(&body)?;
+                let mut body_block = self.emit_block(&body, false)?;
 
                 body_block.push(increment_counter_stmt);
                 body_block.push(boolean_update_stmt);
@@ -251,7 +288,7 @@ impl Emitter {
             },
             ExpVal::While(cond, body) => {
                 let (stmts_cond, val_cond) = self.emit_value(&cond)?;
-                let mut while_body = self.emit_block(&body)?;
+                let mut while_body = self.emit_block(&body, false)?;
 
                 let mut stmts = stmts_cond.clone();
                 while_body.extend(stmts_cond);
@@ -277,7 +314,7 @@ impl Emitter {
                 }
             },
             ExpVal::Block(block) => {
-                Ok(self.emit_block(block)?.stmts)
+                Ok(self.emit_block(block, false)?.stmts)
             },
             // FIXME: are LMul/RMul really dead code?
             ExpVal::BinOp(_, _, _) 
@@ -329,23 +366,61 @@ impl Emitter {
         }).collect::<HIRStatementsResult>()
     }
 
-    fn emit_block(&mut self, b: &Block) -> HIRBlockResult {
-        self.emit_flattened_statements(&b.val)
-        .and_then(|stmts| Ok(hir::Block::new(stmts)))
+    fn emit_block(&mut self, b: &Block, allow_implicit_returns: bool) -> HIRBlockResult {
+        if allow_implicit_returns && !b.trailing_semicolon {
+            let (mut stmts, val) = self.emit_block_value(b)?;
+            stmts.push(
+                hir::Statement::Return(val)
+            );
+
+            Ok(hir::Block::new(stmts))
+        } else {
+            self.emit_flattened_statements(&b.val)
+            .and_then(|stmts| Ok(hir::Block::new(stmts)))
+        }
     }
 
     fn emit_else_block(&mut self, else_: &Else) -> HIRBlockResult {
         match else_.val.as_ref() {
             ElseVal::End => Ok(hir::Block::new(vec![])),
-            ElseVal::Else(block) => self.emit_block(&block),
+            ElseVal::Else(block) => self.emit_block(&block, false),
             ElseVal::ElseIf(cond, then, else__) => {
                 let (mut stmts, cond_val) = self.emit_value(&cond)?;
 
                 stmts.push(
-                    hir::Statement::If(cond_val, self.emit_block(&then)?, self.emit_else_block(&else__)?)
+                    hir::Statement::If(cond_val, self.emit_block(&then, false)?, self.emit_else_block(&else__)?)
                 );
 
                 Ok(hir::Block::new(stmts))
+            }
+        }
+    }
+
+    fn emit_else_value(&mut self, else_: &Else) -> HIRValueResult {
+        match else_.val.as_ref() {
+            ElseVal::End => Ok((vec![], hir::Val::Nothing)),
+            ElseVal::Else(block) => self.emit_block_value(&block),
+            ElseVal::ElseIf(cond, then, else__) => {
+                let out = self.mk_intermediate_var();
+                let (mut stmts, cond_val) = self.emit_value(&cond)?;
+                let (mut then_stmts, then_val) = self.emit_block_value(then)?;
+                let (mut else_stmts, else_val) = self.emit_else_value(else__)?;
+
+                then_stmts.push(hir::Statement::Call(
+                                out.clone(),
+                                hir::Callable::Assign(then_val)));
+                else_stmts.push(hir::Statement::Call(
+                        out.clone(),
+                        hir::Callable::Assign(else_val)));
+
+                stmts.push(
+                    hir::Statement::If(cond_val,
+                        hir::Block::new(then_stmts),
+                        hir::Block::new(else_stmts)
+                    )
+                );
+
+                Ok((stmts, hir::Val::Var(out)))
             }
         }
     }
@@ -358,7 +433,7 @@ impl Emitter {
         // FIXME: we should pass some toplevel_function boolean
         // so that we know that we have to verify if the last stmt is an implicit return (an expr)
         // and we can propagate it properly, otherwise implicit returns are broken.
-        let block = self.emit_block(&f.body)?;
+        let block = self.emit_block(&f.body, true)?;
         Ok(hir::Function::new(
             name,
             f.params.iter().map(|f| f.name.name.clone()).collect(),

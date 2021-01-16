@@ -1,4 +1,5 @@
 use parser::ast as ast;
+use std::iter::FromIterator;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -81,6 +82,27 @@ impl Block {
     pub fn extend(&mut self, stmts: Vec<Statement>) -> &mut Self {
         self.stmts.extend(stmts);
         self
+    }
+}
+
+impl IntoIterator for Block {
+    type Item = Statement;
+    type IntoIter = std::vec::IntoIter<Statement>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.stmts.into_iter()
+    }
+}
+
+impl FromIterator<Statement> for Block {
+    fn from_iter<I: IntoIterator<Item=Statement>>(iter: I) -> Self {
+        let mut c = vec![];
+
+        for i in iter {
+            c.push(i);
+        }
+
+        Block::new(c)
     }
 }
 
