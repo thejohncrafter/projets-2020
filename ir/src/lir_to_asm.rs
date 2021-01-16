@@ -57,6 +57,10 @@ fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>)
                         recv.recv_name(dest);
                         recv.recv(a); recv.recv(b);
                     },
+                    Instruction::Unary(dest, _, a) => {
+                        recv.recv_name(dest);
+                        recv.recv(a);
+                    },
                     Instruction::Mov(dest, a) => {
                         recv.recv_name(dest);
                         recv.recv(a);
@@ -194,6 +198,21 @@ fn inst_to_asm(
                 BinOp::Div => {
                     writeln!(asm, "\tcqto")?;
                     writeln!(asm, "\tidivq %rbx")?;
+                },
+            }
+
+            writeln!(asm, "\tmovq %rax, {}(%rsp)", 8 * var_ids.get(dest).unwrap())?;
+        },
+        Instruction::Unary(dest, op, a) => {
+            write_get_val(asm, reg, var_ids, a, "%rax")?;
+
+            match op {
+                UnaryOp::Neg => {
+                    writeln!(asm, "\tnegq %rax")?;
+                },
+                UnaryOp::Not => {
+                    writeln!(asm, "\tnotq %rax")?;
+                    writeln!(asm, "\tandq $0, %rax")?;
                 },
             }
 

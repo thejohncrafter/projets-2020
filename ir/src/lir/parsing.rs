@@ -202,6 +202,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             statement: Statement,
             statement_semi: Statement,
             bin_op: BinOp,
+            unary_op: UnaryOp,
             val: Val,
         ]
 
@@ -333,6 +334,10 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(Statement::Inst(Instruction::Bin($dest, $op, $a, $b)))
             },
 
+            (statement_semi -> dest:ident ARROW op:unary_op a:val) => {
+                Ok(Statement::Inst(Instruction::Unary($dest, $op, $a)))
+            },
+
             (statement_semi -> dest:ident ARROW v:val) => {
                 Ok(Statement::Inst(Instruction::Mov($dest, $v)))
             },
@@ -383,6 +388,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             (bin_op -> SUB) => {Ok(BinOp::Sub)},
             (bin_op -> MUL) => {Ok(BinOp::Mul)},
             (bin_op -> DIV) => {Ok(BinOp::Div)},
+
+            (unary_op -> SUB) => {Ok(UnaryOp::Neg)},
+            (unary_op -> NOT) => {Ok(UnaryOp::Not)},
 
             (val -> id:ident) => {
                 Ok(Val::Var($id))

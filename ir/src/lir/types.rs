@@ -22,8 +22,14 @@ pub enum BinOp {
     Add, Sub, Mul, Div,
 }
 
+pub enum UnaryOp {
+    Neg,
+    Not,
+}
+
 pub enum Instruction {
     Bin(String, BinOp, Val, Val),
+    Unary(String, UnaryOp, Val),
 
     Mov(String, Val),
 

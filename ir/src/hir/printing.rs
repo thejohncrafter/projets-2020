@@ -77,6 +77,22 @@ impl std::fmt::Display for Callable {
                     (Div, "%")
                 );
             },
+            Callable::Unary(op, a) => {
+                macro_rules! cases {
+                        ($(($variant:ident, $symbol:expr)),*) => {
+                            match op {
+                                $(UnaryOp::$variant => {
+                                write!(f, "{} {};", $symbol, a)?;
+                            },)*
+                        }
+                    };
+                }
+         
+                cases!(
+                    (Neg, "-"),
+                    (Not, "!")
+                );
+            },
             Callable::Assign(v) => {
                 write!(f, "{}", v)?;
             },

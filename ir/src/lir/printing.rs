@@ -42,6 +42,22 @@ impl std::fmt::Display for Instruction {
                     (Div, "%")
                 );
             },
+            Instruction::Unary(dest, op, a) => {
+                macro_rules! cases {
+                    ($(($variant:ident, $symbol:expr)),*) => {
+                        match op {
+                            $(UnaryOp::$variant => {
+                                writeln!(f, "\t{} <- {} {};", dest, $symbol, a)?;
+                            },)*
+                        }
+                    };
+                }
+
+                cases!(
+                    (Neg, "-"),
+                    (Not, "!")
+                );
+            },
             Instruction::Mov(dest, v) => {
                 writeln!(f, "\t{} <- {};", dest, v)?
             },

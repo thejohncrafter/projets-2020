@@ -218,6 +218,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             statement_semi: Statement,
             callable: Callable,
             bin_op: BinOp,
+            unary_op: UnaryOp,
             val: Val,
             ty: Type,
         ]
@@ -400,6 +401,10 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                 Ok(Callable::Bin($op, $a, $b))
             },
 
+            (callable -> op:unary_op a:val) => {
+                Ok(Callable::Unary($op, $a))
+            },
+
             (callable -> a:val) => {
                 Ok(Callable::Assign($a))
             },
@@ -426,6 +431,9 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             (bin_op -> SUB) => {Ok(BinOp::Sub)},
             (bin_op -> MUL) => {Ok(BinOp::Mul)},
             (bin_op -> DIV) => {Ok(BinOp::Div)},
+
+            (unary_op -> SUB) => {Ok(UnaryOp::Neg)},
+            (unary_op -> NOT) => {Ok(UnaryOp::Not)},
 
             (val -> id:ident) => {
                 Ok(Val::Var($id))

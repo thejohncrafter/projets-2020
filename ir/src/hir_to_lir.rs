@@ -273,6 +273,26 @@ fn compile_call(
                 )
             ));
         },
+        hir::Callable::Unary(op, a) => {
+            let (dest_ty, lir_op) = match op {
+                hir::UnaryOp::Neg => (ConcreteType::Int64, lir::UnaryOp::Neg),
+                hir::UnaryOp::Not => (ConcreteType::Bool, lir::UnaryOp::Not),
+            };
+
+            out.push(lir::Statement::Inst(
+                lir::Instruction::Mov(
+                    local.get_var(dest)?.ty_name.clone(),
+                    global.get_ty_id(&dest_ty)?
+                )
+            ));
+            out.push(lir::Statement::Inst(
+                lir::Instruction::Unary(
+                    local.get_var(dest)?.val_name.clone(),
+                    lir_op,
+                    local.compile_val(a)?.val,
+                )
+            ));
+        },
         hir::Callable::Assign(a) => {
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
