@@ -31,6 +31,19 @@ impl Emitter {
         out
     }
 
+    fn emit_block_value(&mut self, b: &Block) -> HIRValueResult {
+        // the value of a block is the value of its last statement.
+        if let Some((last, head)) = b.val.split_last() {
+            let mut stmts = self.emit_flattened_statements(head)?;
+            let (last_stmts, last_val) = self.emit_value(last)?;
+            stmts.extend(last_stmts);
+
+            Ok((stmts, last_val))
+        } else {
+            Ok((vec![], hir::Val::Nothing))
+        }
+    }
+
     fn emit_value(&mut self, e: &Exp) -> HIRValueResult {
         match e.val.as_ref() {
             ExpVal::BinOp(op, a, b) => {
@@ -42,19 +55,9 @@ impl Emitter {
                         hir::Callable::Bin(hir::BinOp::from(*op), val_a, val_b)));
                 Ok((stmts, hir::Val::Var(out)))
             },
-            ExpVal::Block(block) => {
-                // the value of a block is the value of its last statement.
-                if let Some((last, head)) = block.val.split_last() {
-                    let mut stmts = self.emit_flattened_statements(head)?;
-                    let (last_stmts, last_val) = self.emit_value(last)?;
-                    stmts.extend(last_stmts);
-
-                    Ok((stmts, last_val))
-                } else {
-                    Ok((vec![], hir::Val::Var("nothing".to_string())))
-                }
-            },
+            ExpVal::Block(block) => self.emit_block_value(block),
             ExpVal::UnaryOp(op, e) => {
+                // FIXME(Ryan): implement me.
                 Ok((vec![], hir::Val::Var(self.mk_intermediate_var())))
             },
             ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst as u64))),
@@ -92,8 +95,18 @@ impl Emitter {
                 ], hir::Val::Var(out)))
             },
             ExpVal::LMul(cst, block) => {
-                // FIXME: handle block implicit values.
-                Ok((vec![], hir::Val::Var(self.mk_intermediate_var())))
+                let (mut stmts, b_val) = self.emit_block_value(block)?;
+                let out = self.mk_intermediate_var();
+                stmts.push(
+                    hir::Statement::Call(out.clone(),
+                        hir::Callable::Bin(hir::BinOp::Mul,
+                            hir::Val::Const(hir::Type::Int64, *cst as u64),
+                            b_val
+                        )
+                    )
+                );
+
+                Ok((stmts, hir::Val::Var(out)))
             },
             ExpVal::RMul(exp, var) => {
                 let out = self.mk_intermediate_var();
@@ -114,7 +127,7 @@ impl Emitter {
                 // Evaluate internal_exp as a statement.
                 // attribute nothing value.
                 match internal_exp {
-                    None => Ok((vec![], hir::Val::Var("nothing".to_string()))),
+                    None => Ok((vec![], hir::Val::Nothing)),
                     Some(actual_exp) => {
                         self.emit_value(actual_exp)
                     }
@@ -132,7 +145,8 @@ impl Emitter {
 
                 Ok((stmts, hir::Val::Var(out)))
             },
-            _ => Ok((vec![], hir::Val::Var("nothing".to_string())))
+            // FIXME(Ryan): verify we covered all cases.
+            _ => Ok((vec![], hir::Val::Var("I_AM_A_PLACEHOLDER_CHECK_ME_PLEASE".to_string())))
         }
     }
 
@@ -245,6 +259,7 @@ impl Emitter {
     }
 
     fn emit_complex_assign(&mut self, structure_exp: &Exp, field_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
+        // FIXME: do it.
         Ok(vec![])
     }
 
@@ -294,8 +309,10 @@ impl Emitter {
         self.current_local_vars.clear();
         self.next_intermediate_variable_id = 0;
 
+        // FIXME: we should pass some toplevel_function boolean
+        // so that we know that we have to verify if the last stmt is an implicit return (an expr)
+        // and we can propagate it properly, otherwise implicit returns are broken.
         let block = self.emit_block(&f.body)?;
-
         Ok(hir::Function::new(
             name,
             f.params.iter().map(|f| f.name.name.clone()).collect(),
@@ -344,6 +361,11 @@ pub fn typed_ast_to_hir(t_ast: TypedDecls) -> HIRDeclsResult {
     }
 
     // FIXME: build an adhoc thunk for global expressions as a main function.
+    // __start0000000000… let's say (0… to avoid the case where the user already defined
+    // __start00…)
+    // we generate all global variables so that we can hand it out to the emitter for intermediate
+    // variables generation.
+    // then we set __start00… to be the entrypoint.
     
     Ok(compiled)
 }
