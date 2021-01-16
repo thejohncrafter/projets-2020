@@ -433,9 +433,6 @@ impl Emitter {
         self.current_local_vars.clear();
         self.next_intermediate_variable_id = 0;
 
-        // FIXME: we should pass some toplevel_function boolean
-        // so that we know that we have to verify if the last stmt is an implicit return (an expr)
-        // and we can propagate it properly, otherwise implicit returns are broken.
         let block = self.emit_block(&f.body, true)?;
         Ok(hir::Function::new(
             name,
