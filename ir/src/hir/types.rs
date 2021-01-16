@@ -24,10 +24,19 @@ pub enum BinOp {
     Add, Sub, Mul, Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     Neg,
     Not,
+}
+
+impl From<ast::UnaryOp> for UnaryOp {
+    fn from(uop: ast::UnaryOp) -> Self {
+        match uop {
+            ast::UnaryOp::Neg => UnaryOp::Neg,
+            ast::UnaryOp::Not => UnaryOp::Not
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

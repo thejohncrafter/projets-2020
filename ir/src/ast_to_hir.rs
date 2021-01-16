@@ -90,8 +90,18 @@ impl Emitter {
             },
             ExpVal::Block(block) => self.emit_block_value(block),
             ExpVal::UnaryOp(op, e) => {
-                // FIXME(Ryan): implement me.
-                Ok((vec![], hir::Val::Var(self.mk_intermediate_var())))
+                let (mut stmts, val) = self.emit_value(e)?;
+                let out = self.mk_intermediate_var();
+
+                stmts.push(hir::Statement::Call(
+                        out.clone(),
+                        hir::Callable::Unary(
+                            hir::UnaryOp::from(*op),
+                            val
+                        )
+                    ));
+
+                Ok((stmts, hir::Val::Var(out)))
             },
             ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst as u64))),
             ExpVal::Bool(cst) => Ok((vec![], hir::Val::Const(hir::Type::Bool, u64::from(*cst)))),
