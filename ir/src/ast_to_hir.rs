@@ -42,6 +42,18 @@ impl Emitter {
                         hir::Callable::Bin(hir::BinOp::from(*op), val_a, val_b)));
                 Ok((stmts, hir::Val::Var(out)))
             },
+            ExpVal::Block(block) => {
+                // the value of a block is the value of its last statement.
+                if let Some((last, head)) = block.val.split_last() {
+                    let mut stmts = self.emit_flattened_statements(head)?;
+                    let (last_stmts, last_val) = self.emit_value(last)?;
+                    stmts.extend(last_stmts);
+
+                    Ok((stmts, last_val))
+                } else {
+                    Ok((vec![], hir::Val::Var("nothing".to_string())))
+                }
+            },
             ExpVal::UnaryOp(op, e) => {
                 Ok((vec![], hir::Val::Var(self.mk_intermediate_var())))
             },
@@ -219,7 +231,17 @@ impl Emitter {
 
     fn emit_global_assign(&mut self, var_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
         self.current_local_vars.insert(var_name.clone());
-        Ok(vec![])
+
+        // Here, we want to decompose rhs_expr as much as possible.
+        // And finally, assign its value.
+        let (mut stmts, val) = self.emit_value(rhs_expr)?;
+
+        stmts.push(hir::Statement::Call(
+                var_name.clone(),
+                hir::Callable::Assign(val)
+        ));
+
+        Ok(stmts)
     }
 
     fn emit_complex_assign(&mut self, structure_exp: &Exp, field_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
@@ -239,11 +261,16 @@ impl Emitter {
         Ok((stmts, vals))
     }
 
-    fn emit_block(&mut self, b: &Block) -> HIRBlockResult {
-        b.val.iter().map(|e| self.emit_statements(&e)).flat_map(|result| match result {
+    fn emit_flattened_statements(&mut self, exps: &[Exp]) -> HIRStatementsResult {
+        exps.iter().map(|e| self.emit_statements(&e)).flat_map(|result| match result {
             Ok(stmts) => stmts.into_iter().map(|item| Ok(item)).collect(),
             Err(err) => vec![Err(err)]
-        }).collect::<HIRStatementsResult>().and_then(|stmts| Ok(hir::Block::new(stmts)))
+        }).collect::<HIRStatementsResult>()
+    }
+
+    fn emit_block(&mut self, b: &Block) -> HIRBlockResult {
+        self.emit_flattened_statements(&b.val)
+        .and_then(|stmts| Ok(hir::Block::new(stmts)))
     }
 
     fn emit_else_block(&mut self, else_: &Else) -> HIRBlockResult {
