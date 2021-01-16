@@ -16,17 +16,17 @@ pub type HIRDeclsResult = Result<Vec<hir::Decl>, Error>;
 
 struct Emitter {
     pub next_intermediate_variable_id: u64,
-    pub current_local_vars: Vec<String>
+    pub current_local_vars: HashSet<String>
 }
 
 impl Emitter {
     fn init() -> Self {
-        Emitter { next_intermediate_variable_id: 0, current_local_vars: vec![] }
+        Emitter { next_intermediate_variable_id: 0, current_local_vars: HashSet::new() }
     }
 
     fn mk_intermediate_var(&mut self) -> String {
         let out = format!("__intermediate_internal{}", self.next_intermediate_variable_id);
-        self.current_local_vars.push(out.clone());
+        self.current_local_vars.insert(out.clone());
         self.next_intermediate_variable_id += 1;
         out
     }
@@ -218,6 +218,7 @@ impl Emitter {
     }
 
     fn emit_global_assign(&mut self, var_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
+        self.current_local_vars.insert(var_name.clone());
         Ok(vec![])
     }
 
@@ -271,7 +272,7 @@ impl Emitter {
         Ok(hir::Function::new(
             name,
             f.params.iter().map(|f| f.name.name.clone()).collect(),
-            self.current_local_vars.drain(..).collect(), // FIXME: collect all assigns.
+            self.current_local_vars.drain().collect(), // FIXME: collect all assigns.
             block
         ))
     }
