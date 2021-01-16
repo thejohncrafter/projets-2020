@@ -30,7 +30,7 @@ fn main()
     test_var <- call fact((Int64, 5));
     _ <- call print_test_var();
     
-    test_var <- call fact((Int64, 4));
+    test_var <- call native pow((Int64, 2), (Int64, 6));
     _ <- call print_test_var();
 
     return (Int64, 0);

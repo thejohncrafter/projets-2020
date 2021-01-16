@@ -12,10 +12,7 @@
 
 // Assuming a 64-bits machine, we get 64 bits long pointers.
 
-void native_print_bool(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty, uint64_t val) {
-    *ret_ty = TYPE_NOTHING;
-    *ret_val = 0;
-
+void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val) {
     if(ty != TYPE_BOOL) {
         fprintf(stderr, "Expected a Bool for print_bool.\n");
         exit(1);
@@ -25,39 +22,44 @@ void native_print_bool(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty, uint64_
         printf("true\n");
     else
         printf("false\n");
-}
 
-void native_print_int(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty, uint64_t val) {
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
+}
 
+void native_print_int(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val) {
     if(ty != TYPE_INT64) {
         fprintf(stderr, "Expected a Int64 for print_int.\n");
         exit(1);
     }
 
     printf("%" PRIu64 "\n", val);
-}
 
-void native_print_string(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty, char* val) {
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
+}
 
+void native_print_string(int64_t *ret_ty, int64_t *ret_val, int64_t ty, char* val) {
     if(ty != TYPE_STR) {
         fprintf(stderr, "Expected a Str for print_string.\n");
         exit(1);
     }
 
     printf("%s\n", val);
+
+    *ret_ty = TYPE_NOTHING;
+    *ret_val = 0;
 }
 
-void native_pow(uint64_t *ret_ty, uint64_t *ret_val, uint64_t ty_1, int64_t val_1, uint64_t ty_2, int64_t val_2) {
+void native_pow(int64_t *ret_ty, int64_t *ret_val, int64_t ty_1, int64_t val_1, int64_t ty_2, int64_t val_2) {
     if(ty_1 != TYPE_INT64 && ty_2 == TYPE_INT64) {
         fprintf(stderr, "Expected two Int64 for pow.\n");
         exit(1);
     }
 
+    int64_t res = pow(val_1, val_2);
+
     *ret_ty = TYPE_INT64;
-    *ret_val = pow(val_1, val_2);
+    *ret_val = res;
 }
 

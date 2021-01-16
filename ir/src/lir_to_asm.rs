@@ -262,7 +262,7 @@ fn inst_to_asm(
             }
 
             let args: Vec<UsrOrNative> = if *native {
-                vec!(UsrOrNative::Native(false), UsrOrNative::Native(true)).into_iter()
+                vec!(UsrOrNative::Native(true), UsrOrNative::Native(false)).into_iter()
                     .chain(args.iter().map(|a| UsrOrNative::Usr(a)))
                     .collect()
             } else {
