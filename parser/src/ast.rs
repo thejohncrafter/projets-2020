@@ -17,18 +17,25 @@ impl<'a> LocatedIdent<'a> {
 pub struct Param<'a> {
     pub span: Span<'a>,
     pub name: LocatedIdent<'a>,
-    pub ty: Option<LocatedIdent<'a>>,
+    pub ty: StaticType, // Option<LocatedIdent<'a>>,
 }
 
 impl<'a> Param<'a> {
     pub fn new(span: Span<'a>, name: LocatedIdent<'a>, ty: Option<LocatedIdent<'a>>) -> Self {
-        Param {span, name, ty}
+        Param {span, name, ty: ty.map_or(StaticType::Any, |lident| static_type_from_str(&lident.name))}
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Scope {
+    Global,
+    Local
 }
 
 #[derive(Debug)]
 pub struct LValue<'a> {
     pub span: Span<'a>,
+    pub scope: Scope,
     pub in_exp: Option<Exp<'a>>,
     pub name: String,
 }
@@ -39,11 +46,12 @@ impl<'a> LValue<'a> {
             span,
             in_exp,
             name,
+            scope: Scope::Global
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum BinOp {
     Or,
     And,
@@ -64,11 +72,42 @@ pub enum BinOp {
     Pow,
 }
 
-#[derive(Debug)]
+impl fmt::Display for BinOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BinOp::Or => write!(f, "||"),
+            BinOp::And => write!(f, "&&"),
+            BinOp::Equ => write!(f, "=="),
+            BinOp::Neq => write!(f, "!="),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Leq => write!(f, "≤"),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Geq => write!(f, "≥"),
+            BinOp::Plus => write!(f, "+"),
+            BinOp::Minus => write!(f, "-"),
+            BinOp::Times => write!(f, "×"),
+            BinOp::Div => write!(f, "/"),
+            BinOp::Pow => write!(f, "^")
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,
 }
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "¬"),
+        }
+    }
+}
+
+
 
 #[derive(Debug)]
 pub struct Range<'a> {
@@ -125,7 +164,7 @@ pub enum ExpVal<'a> {
     While(Exp<'a>, Block<'a>),
 }
 
-#[derive(Debug, PartialEq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum StaticType {
     Any,
     Nothing,
@@ -133,6 +172,17 @@ pub enum StaticType {
     Bool,
     Str,
     Struct(String)
+}
+
+fn static_type_from_str(s: &str) -> StaticType {
+    match s {
+        "Any" => StaticType::Any,
+        "Nothing" => StaticType::Nothing,
+        "Int64" => StaticType::Int64,
+        "Bool" => StaticType::Bool,
+        "String" => StaticType::Str,
+        _ => StaticType::Struct(s.to_string())
+    }
 }
 
 impl fmt::Display for StaticType {
@@ -152,7 +202,7 @@ impl fmt::Display for StaticType {
 pub struct Exp<'a> {
     pub span: Span<'a>,
     pub val: Box<ExpVal<'a>>,
-    pub static_ty: Option<StaticType> // It should be populated as part of the static typing phase. If a type is unknown, then it must be Any.
+    pub static_ty: StaticType
 }
 
 impl<'a> Exp<'a> {
@@ -160,7 +210,7 @@ impl<'a> Exp<'a> {
         Exp {
             span,
             val: Box::new(val),
-            static_ty: None
+            static_ty: StaticType::Any
         }
     }
 }
@@ -170,12 +220,12 @@ pub struct Block<'a> {
     pub span: Span<'a>,
     pub val: Vec<Exp<'a>>,
     pub trailing_semicolon: bool,
-    pub static_ty: Option<StaticType>
+    pub static_ty: StaticType
 }
 
 impl<'a> Block<'a> {
     pub fn new(span: Span<'a>, val: Vec<Exp<'a>>, trailing_semicolon: bool) -> Self {
-        Block {span, val, trailing_semicolon, static_ty: None}
+        Block {span, val, trailing_semicolon, static_ty: StaticType::Any}
     }
 }
 
@@ -198,7 +248,7 @@ pub struct Function<'a> {
     pub span: Span<'a>,
     pub name: String,
     pub params: Vec<Param<'a>>,
-    pub ret_ty: Option<LocatedIdent<'a>>,
+    pub ret_ty: StaticType,
     pub body: Block<'a>,
 }
 
@@ -210,7 +260,7 @@ impl<'a> Function<'a> {
         ret_ty: Option<LocatedIdent<'a>>,
         body: Block<'a>
     ) -> Self {
-        Function {span, name, params, ret_ty, body}
+        Function {span, name, params, ret_ty: ret_ty.map_or(StaticType::Any, |lident| static_type_from_str(&lident.name)), body}
     }
 }
 

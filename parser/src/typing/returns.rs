@@ -2,25 +2,30 @@ use super::data::*;
 use crate::ast::*;
 use automata::line_counter::Span;
 
-fn verify_return_type<'a>(span: Span<'a>, found: Option<&Exp<'a>>, expected: &StaticType) -> ReturnVerification<'a> {
-    if found.is_none() && expected != &StaticType::Any && expected != &StaticType::Nothing {
-        return Err(
-            (span, format!("Mismatching return types, found nothing, expected: '{}'", expected).to_string()).into()
-        );
-    }
-
-    if !is_compatible(found.unwrap().static_ty.as_ref(), Some(expected)) {
-        Err(
-            (found.unwrap().span, format!("Mismatching return types, found: '{:?}', expected: '{}'", found.unwrap().static_ty, expected).to_string()).into()
-        )
-    } else {
-        Ok(())
+fn verify_return_type<'a>(span: Span<'a>, found: Option<&Exp<'a>>, expected: &StaticType) -> InternalTypingResult<'a> {
+    match found {
+        None => {
+            if expected != &StaticType::Any && expected != &StaticType::Nothing {
+                Err(
+                    (span, format!("Mismatching return types, found nothing, expected: '{}'", expected).to_string()).into()
+                )
+            } else { Ok(()) }
+        },
+        Some(expr) => {
+            if !is_compatible(expr.static_ty.clone(), expected.clone()) {
+                Err(
+                    (expr.span, format!("Mismatching return types, found: '{}', expected: '{}'", expr.static_ty, expected).to_string()).into()
+                )
+            } else {
+                Ok(())
+            }
+        }
     }
 }
 
-fn visit_returns<'a>(e: &Exp<'a>, expected: &StaticType) -> ReturnVerification<'a> {
+fn visit_returns<'a>(e: &Exp<'a>, expected: &StaticType) -> InternalTypingResult<'a> {
     
-    fn visit_else_returns<'a>(else_: &Else<'a>, expected: &StaticType) -> ReturnVerification<'a> {
+    fn visit_else_returns<'a>(else_: &Else<'a>, expected: &StaticType) -> InternalTypingResult<'a> {
         match else_.val.as_ref() {
             ElseVal::End => {},
             ElseVal::Else(b) => {
@@ -82,10 +87,31 @@ fn visit_returns<'a>(e: &Exp<'a>, expected: &StaticType) -> ReturnVerification<'
     }
 }
 
-pub fn verify_returns<'a>(block: &Block<'a>, expected: StaticType) -> ReturnVerification<'a> {
+pub fn verify_explicit_returns<'a>(block: &Block<'a>, expected: StaticType) -> InternalTypingResult<'a> {
     for e in &block.val {
         visit_returns(e, &expected)?;
     }
 
     Ok(())
+}
+
+pub fn verify_implicit_return<'a>(func: &Function<'a>) -> InternalTypingResult<'a> {
+    if !func.body.trailing_semicolon {
+        match func.body.val.last() {
+            None => {
+                if !is_compatible(func.ret_ty.clone(), StaticType::Nothing) { // Empty body
+                    return Err(
+                        (func.span, format!("Empty function '{}' returning `nothing` while '{}' was expected", func.name, func.ret_ty).to_string()).into());
+                }
+            },
+            Some(last_expr) => {
+                if !is_compatible(func.ret_ty.clone(), last_expr.static_ty.clone()) {
+                    return Err(
+                        (last_expr.span, format!("Invalid type for implicit return in function '{}', expected '{}', found: '{}'", func.name, func.ret_ty, last_expr.static_ty).to_string()).into());
+                }
+            }
+        }
+    }
+
+    Ok(()) // Everything is okay.
 }
