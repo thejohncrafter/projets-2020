@@ -33,7 +33,7 @@ pub enum Instruction {
     Jumpif(Val, Label),
     JumpifNot(Val, Label),
 
-    Call(Option<(String, String)>, String, Vec<Val>),
+    Call(Option<(String, String)>, bool, String, Vec<Val>),
     Return(Val, Val),
 }
 

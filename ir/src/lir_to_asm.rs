@@ -72,7 +72,7 @@ fn extract_ids(f: &Function) -> (HashMap<String, usize>, HashMap<String, usize>)
                     Instruction::JumpifNot(a, _) => {
                         recv.recv(a);
                     },
-                    Instruction::Call(dest, _, v) => {
+                    Instruction::Call(dest, _, _, v) => {
                         if let Some((dest1, dest2)) = dest {
                             recv.recv_name(dest1);
                             recv.recv_name(dest2);
@@ -232,14 +232,27 @@ fn inst_to_asm(
                 Err(format!("No label named \"{}\"", label.name))?
             }
         },
-        Instruction::Call(dest, fn_name, args) => {
+        Instruction::Call(dest, native, fn_name, args) => {
+            enum UsrOrNative<'a> {
+                Usr(&'a Val),
+                Native(bool),
+            }
+
+            let args: Vec<UsrOrNative> = if *native {
+                vec!(UsrOrNative::Native(false), UsrOrNative::Native(true)).into_iter()
+                    .chain(args.iter().map(|a| UsrOrNative::Usr(a)))
+                    .collect()
+            } else {
+                args.iter().map(|a| UsrOrNative::Usr(a)).collect()
+            };
+
             let stack_extra = if args.len() >= 6 {
                     if (args.len() - 6) % 2 == 0 {
                         8 * (args.len() - 6)
                     } else {
                         8 * (args.len() - 5)
                     }
-                } else {0};
+                } else {0} + if *native {16} else {0};
 
             // Reserve space for arguments
             if stack_extra != 0 {
@@ -249,16 +262,32 @@ fn inst_to_asm(
             // Store the arguments
             args.iter().enumerate().try_for_each(|(i, arg)| -> Result<(), Error> {
                     match arg {
-                        Val::Var(name) => {
+                        UsrOrNative::Native(b) => {
+                            writeln!(
+                                asm, "\tmovq %rsp, %rax"
+                            )?;
+                            if *b {
+                                writeln!(
+                                    asm, "\taddq ${}, %rax",
+                                    stack_extra - 8
+                                )?;
+                            } else {
+                                writeln!(
+                                    asm, "\taddq ${}, %rax",
+                                    stack_extra - 16
+                                )?;
+                            }
+                        },
+                        UsrOrNative::Usr(Val::Var(name)) => {
                             writeln!(
                                 asm, "\tmovq {}(%rsp), %rax",
                                 8 * var_ids.get(name).unwrap() + stack_extra
                             )?;
                         },
-                        Val::Const(i) => {
+                        UsrOrNative::Usr(Val::Const(i)) => {
                             writeln!(asm, "\tmovq ${}, %rax", i)?;
                         },
-                        Val::Str(s) => {
+                        UsrOrNative::Usr(Val::Str(s)) => {
                             let id = reg.register(s.clone());
                             writeln!(asm, "\tmovq $string_{}, %rax", id)?;
                         },
@@ -278,28 +307,20 @@ fn inst_to_asm(
                 })?;
 
             // Call the function
-            match fn_name.as_str() {
-                "print_int" => {
-                    if args.len() != 2 {
-                        Err("Expected 2 arguments for \"print_int\".".to_string())?
-                    }
-
-                    writeln!(asm, "\tcall print_int")?
-                },
-                "print_string" => {
-                    if args.len() != 2 {
-                        Err("Expected 2 arguments for \"print_string\".".to_string())?
-                    }
-
-                    writeln!(asm, "\tcall print_string")?
-                },
-                _ => {
-                    if let Some(id) = fn_ids.get(fn_name) {
-                        writeln!(asm, "\tcall fn_{}", id)?
-                    } else {
-                        Err(format!("No function named \"{}\".", fn_name))?
-                    }
+            if *native {
+                writeln!(asm, "\tcall {}", fn_name)?;
+            } else {
+                if let Some(id) = fn_ids.get(fn_name) {
+                    writeln!(asm, "\tcall fn_{}", id)?
+                } else {
+                    Err(format!("No function named \"{}\".", fn_name))?
                 }
+            }
+
+            // Get the native return values
+            if *native {
+                writeln!(asm, "\tmovq {}(%rsp), %rax", stack_extra - 8)?;
+                writeln!(asm, "\tmovq {}(%rsp), %rdx", stack_extra - 16)?;
             }
 
             // Free the space we reserved for arguments
@@ -407,26 +428,6 @@ pub fn lir_to_asm(fns: &[Function]) -> Result<String, Error> {
     writeln!(asm, "main:")?;
     writeln!(asm, "\tcall fn_{}", main_id)?;
     writeln!(asm, "\tmovq $0, %rax")?;
-    writeln!(asm, "\tret")?;
-
-    writeln!(asm, "print_int:")?;
-    // The second argument is already the right one.
-    // TODO: check the type !
-    //writeln!(asm, "\tmov %rdi, %rsi")?;
-    writeln!(asm, "\tmov $message_int, %rdi")?;
-    writeln!(asm, "\tmov $0, %rax")?;
-    writeln!(asm, "\tcall printf")?;
-    writeln!(asm, "\tmov $0, %rax")?;
-    writeln!(asm, "\tmov $0, %rdx")?;
-    writeln!(asm, "\tret")?;
-
-    writeln!(asm, "print_string:")?;
-    //writeln!(asm, "\tmov %rdi, %rsi")?;
-    writeln!(asm, "\tmov $message_string, %rdi")?;
-    writeln!(asm, "\tmov $0, %rax")?;
-    writeln!(asm, "\tcall printf")?;
-    writeln!(asm, "\tmov $0, %rax")?;
-    writeln!(asm, "\tmov $0, %rdx")?;
     writeln!(asm, "\tret")?;
 
     fns.iter().enumerate().try_for_each(

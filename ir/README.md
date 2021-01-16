@@ -25,6 +25,7 @@ A language where :
     * Function calls are done with some `Call` primitive, by giving
       a function identifier (which needs not be a `Data` object, as
       we do not need lambdas)
+ * All functions have a return value, even if it is `Nothing`.
 
 This language is _not_ typed : everything is `Data`.
 
@@ -72,4 +73,21 @@ for optimizations, like SSA and efficient register allocation.
 
 The script `compile_lir.sh` runs compiles `ir/test.lir` to `ir/target/test.s`,
 then performs assembly and linking within `ir/target/`.
+
+# Runtime
+
+Both the HIR and the LIR provide ways to call "native functions", which
+are defined in `runtime.c`.
+
+A native call to a function `foo` in any of the IRs will be compiled to
+a call to `native_foo`. `native_foo` should then be declared in `runtime.c`.
+
+Function must return two values (the type of the return value, and the actual
+return value). To interoperate with C, the first two arguments of every
+native function are :
+ * a pointer to `ret_val_ty`
+ * a pointer to `ret_val_val`
+
+Every argument of the native function is 64 bits long
+(this is required by the representation of values that we chose).
 

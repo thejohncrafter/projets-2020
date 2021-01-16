@@ -157,6 +157,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             JUMP: (),
             JUMPIF: (),
             CALL: (),
+            NATIVE: (),
             RETURN: (),
 
             LBRACKET: (),
@@ -194,6 +195,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             ident_list: Vec<String>,
             val_list: Vec<Val>,
             function_head: (String, Vec<String>),
+            call_head: bool,
 
             function: Function,
             block: Vec<Statement>,
@@ -215,6 +217,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                                 "jump" => $JUMP(()),
                                 "jumpif" => $JUMPIF(()),
                                 "call" => $CALL(()),
+                                "native" => $NATIVE(()),
                                 "return" => $RETURN(()),
 
                                 _ => $ident(name)
@@ -299,6 +302,9 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
                 Ok(($id, $vars))
             },
 
+            (call_head -> CALL) => {Ok(false)},
+            (call_head -> CALL NATIVE) => {Ok(true)},
+
             (function -> head:function_head LBRACKET RBRACKET) => {
                 Ok(Function::new($head.0, $head.1, Block::new(vec!())))
             },
@@ -346,17 +352,17 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Functi
             },
 
 
-            (statement_semi -> CALL f:ident LPAR RPAR) => {
-                Ok(Statement::Inst(Instruction::Call(None, $f, vec!())))
+            (statement_semi -> native:call_head f:ident LPAR RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(None, $native, $f, vec!())))
             },
-            (statement_semi -> CALL f:ident LPAR v:val_list RPAR) => {
-                Ok(Statement::Inst(Instruction::Call(None, $f, $v)))
+            (statement_semi -> native:call_head f:ident LPAR v:val_list RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(None, $native, $f, $v)))
             },
-            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW CALL f:ident LPAR RPAR) => {
-                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $f, vec!())))
+            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW native:call_head f:ident LPAR RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $native, $f, vec!())))
             },
-            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW CALL f:ident LPAR v:val_list RPAR) => {
-                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $f, $v)))
+            (statement_semi -> LPAR dest1:ident COMMA dest2:ident RPAR ARROW native:call_head f:ident LPAR v:val_list RPAR) => {
+                Ok(Statement::Inst(Instruction::Call(Some(($dest1, $dest2)), $native, $f, $v)))
             },
 
             (statement_semi -> RETURN v0:val COMMA v1:val) => {

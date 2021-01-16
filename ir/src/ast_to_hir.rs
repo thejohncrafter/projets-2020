@@ -175,7 +175,7 @@ impl Emitter {
 
                 stmts.push(
                     hir::Statement::Call(out.clone(),
-                    hir::Callable::Call(name.clone(), vals))
+                    hir::Callable::Call(name.clone(), false, vals))
                 );
 
                 Ok((stmts, hir::Val::Var(out)))
@@ -255,7 +255,10 @@ impl Emitter {
             ExpVal::Call(f_name, args) => {
                 let (mut stmts, vals) = self.emit_values(&args)?;
 
-                stmts.push(hir::Statement::FnCall(f_name.clone(), vals));
+                stmts.push(hir::Statement::Call(
+                    self.mk_intermediate_var(),
+                    hir::Callable::Call(f_name.clone(), false, vals),
+                ));
 
                 Ok(stmts)
             },

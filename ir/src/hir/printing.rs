@@ -37,10 +37,11 @@ impl std::fmt::Display for Val {
 impl std::fmt::Display for Callable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Callable::Call(fn_name, args) => {
+            Callable::Call(fn_name, is_native, args) => {
                 writeln!(
-                    f, "call {}({})",
+                    f, "call{} {}({})",
                     fn_name,
+                    if *is_native {" native"} else {""},
                     args.iter().enumerate().map(|(i, arg)| if i == 0 {
                             format!("{}", arg)
                         } else {
@@ -96,19 +97,6 @@ impl std::fmt::Display for Function {
         fn print_block(f: &mut std::fmt::Formatter<'_>, indent: usize, b: &Block) -> std::fmt::Result {
             b.stmts.iter().try_for_each(|stmt| {
                 match stmt {
-                    Statement::FnCall(fn_name, args) => {
-                        writeln!(
-                            f, "{:indent$}call {}({})",
-                            "",
-                            fn_name,
-                            args.iter().enumerate().map(|(i, arg)| if i == 0 {
-                                    format!("{}", arg)
-                                } else {
-                                    format!(", {}", arg)
-                                }).collect::<String>(),
-                            indent=(4*indent)
-                        )?;
-                    },
                     Statement::Call(dest, c) => {
                         writeln!(f, "{:indent$}{} <- {}", "", dest, c, indent=(4*indent))?;
                     },

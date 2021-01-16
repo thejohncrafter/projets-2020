@@ -158,6 +158,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             FN: (),
             VARS: (),
             CALL: (),
+            NATIVE: (),
             RETURN: (),
             IF: (),
             ELSE: (),
@@ -207,7 +208,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
             function_head: (String, Vec<String>),
             vars_list: Vec<String>,
             statements_list: Vec<Statement>,
-            field: (String, Option<Type>),
+            call_head: bool,
 
             decl: Decl,
             structure: StructDecl,
@@ -232,6 +233,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                                 "fn" => $FN(()),
                                 "vars" => $VARS(()),
                                 "call" => $CALL(()),
+                                "native" => $NATIVE(()),
                                 "return" => $RETURN(()),
                                 "if" => $IF(()),
                                 "else" => $ELSE(()),
@@ -344,6 +346,9 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                 Ok(v)
             },
 
+            (call_head -> CALL) => {Ok(false)},
+            (call_head -> CALL NATIVE) => {Ok(true)},
+
             (decl -> s:structure) => {
                 Ok(Decl::Struct($s))
             },
@@ -369,13 +374,6 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                 Ok(Block::new($l))
             },
 
-            (statement -> CALL fn_name:ident LPAR RPAR SEMICOLON) => {
-                Ok(Statement::FnCall($fn_name, vec!()))
-            },
-            (statement -> CALL fn_name:ident LPAR v:val_list RPAR SEMICOLON) => {
-                Ok(Statement::FnCall($fn_name, $v))
-            },
-
             (statement -> dest:ident ARROW c:callable SEMICOLON) => {
                 Ok(Statement::Call($dest, $c))
             },
@@ -391,11 +389,11 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                 Ok(Statement::While($v, $b))
             },
 
-            (callable -> CALL fn_name:ident LPAR RPAR) => {
-                Ok(Callable::Call($fn_name, vec!()))
+            (callable -> native:call_head fn_name:ident LPAR RPAR) => {
+                Ok(Callable::Call($fn_name, $native, vec!()))
             },
-            (callable -> CALL f_name:ident LPAR v:val_list RPAR) => {
-                Ok(Callable::Call($f_name, $v))
+            (callable -> native:call_head f_name:ident LPAR v:val_list RPAR) => {
+                Ok(Callable::Call($f_name, $native, $v))
             },
 
             (callable -> a:val op:bin_op b:val) => {

@@ -26,7 +26,10 @@ pub enum BinOp {
 
 #[derive(Debug, Clone)]
 pub enum Callable {
-    Call(String, Vec<Val>),
+    //  * Called function name;
+    //  * Is is a native function ?;
+    //  * Arguments for the call.
+    Call(String, bool, Vec<Val>),
     Bin(BinOp, Val, Val),
 
     Assign(Val),
@@ -37,7 +40,6 @@ pub enum Callable {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    FnCall(String, Vec<Val>),
     // Destination variable and called function
     Call(String, Callable),
     Return(Val),

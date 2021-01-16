@@ -57,7 +57,9 @@ impl std::fmt::Display for Instruction {
             Instruction::JumpifNot(a, l) => {
                 writeln!(f, "\tjumpif not {} {};", a, l.name)?
             },
-            Instruction::Call(dest, fn_name, args) => {
+            Instruction::Call(dest, native, fn_name, args) => {
+                let native_fmt = if *native {" native"} else {""};
+
                 let args_fmt = args.iter().enumerate().map(|(i, a)| if i == 0 {
                         format!("{}", a)
                     } else {
@@ -66,13 +68,13 @@ impl std::fmt::Display for Instruction {
                 
                 if let Some((dest1, dest2)) = dest {
                     writeln!(
-                        f, "\t({}, {}) <- call {}({});",
-                        dest1, dest2, fn_name, args_fmt
+                        f, "\t({}, {}) <- call{} {}({});",
+                        dest1, dest2, native_fmt, fn_name, args_fmt
                     )?
                 } else {
                     writeln!(
-                        f, "\tcall {}({});",
-                        fn_name, args_fmt
+                        f, "\tcall{} {}({});",
+                        native_fmt, fn_name, args_fmt
                     )?
                 }
             },
