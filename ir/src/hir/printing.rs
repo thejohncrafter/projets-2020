@@ -16,6 +16,9 @@ impl std::fmt::Display for Type {
             Type::Struct(id) => {
                 write!(f, "Struct {}", id)
             },
+            Type::Nothing => {
+                write!(f, "Nothing")
+            }
         }
     }
 }
@@ -23,6 +26,7 @@ impl std::fmt::Display for Type {
 impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Val::Nothing => write!(f, "nothing"),
             Val::Var(name) => write!(f, "{}", name),
             Val::Const(u, v) => write!(f, "({}, {})", u, v),
             Val::Str(s) => write!(f, "{:?}", s),
@@ -69,7 +73,8 @@ impl std::fmt::Display for Callable {
                     (Add, "+"),
                     (Sub, "-"),
                     (Mul, "*"),
-                    (Div, "%")
+                    (Div, "%"),
+                    (Pow, "^")
                 );
             },
             Callable::Assign(v) => {

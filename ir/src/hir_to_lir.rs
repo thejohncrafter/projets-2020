@@ -32,6 +32,7 @@ enum ConcreteType {
 impl From<&hir::Type> for ConcreteType {
     fn from(t: &hir::Type) -> Self {
         match t {
+            hir::Type::Nothing => ConcreteType::Nothing,
             hir::Type::Int64 => ConcreteType::Int64,
             hir::Type::Bool => ConcreteType::Bool,
             hir::Type::Str => ConcreteType::Str,
@@ -165,6 +166,12 @@ impl<'a> LocalRegistry<'a> {
 
     fn compile_val(&self, val: &hir::Val) -> Result<CompiledVal, Error> {
         match val {
+            hir::Val::Nothing => {
+                Ok(CompiledVal::new(
+                        lir::Val::Var("nothing".to_string()),
+                        lir::Val::Var("nothing".to_string())
+                )) // FIXME(Ryan): plz can u fix?
+            },
             hir::Val::Var(name) => {
                 let data = self.get_var(name)?;
                 Ok(CompiledVal::new(
@@ -234,6 +241,7 @@ fn compile_call(
                 hir::BinOp::Sub => (ConcreteType::Int64, lir::BinOp::Sub),
                 hir::BinOp::Mul => (ConcreteType::Int64, lir::BinOp::Mul),
                 hir::BinOp::Div => (ConcreteType::Int64, lir::BinOp::Div),
+                hir::BinOp::Pow => (ConcreteType::Int64, lir::BinOp::Mul) // FIXME(Ryan): plz can u fix?
             };
 
             out.push(lir::Statement::Inst(

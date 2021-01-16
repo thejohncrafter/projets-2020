@@ -9,8 +9,8 @@ use std::path::Path;
 
 use clap::{Arg, App};
 
-use parse::parse;
 use typing::main::static_type;
+use parse::parse;
 
 fn run(file_name: &str, parse_only: bool, _type_only: bool) -> Result<(), String> {
     let path = Path::new(file_name);

@@ -1,23 +1,50 @@
+use parser::ast as ast;
 
+#[derive(Debug, Clone)]
 pub enum Type {
+    Nothing,
     Int64,
     Bool,
     Str,
     Struct(String),
 }
 
+#[derive(Debug, Clone)]
 pub enum Val {
     Var(String),
     Const(Type, u64),
     Str(String),
+    Nothing
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     And, Or,
     Equ, Neq, Lt, Leq, Gt, Geq,
-    Add, Sub, Mul, Div
+    Add, Sub, Mul, Div, Pow
 }
 
+impl From<ast::BinOp> for BinOp {
+    fn from(bop: ast::BinOp) -> Self {
+        match bop {
+            ast::BinOp::And => BinOp::And,
+            ast::BinOp::Or => BinOp::Or,
+            ast::BinOp::Equ => BinOp::Equ,
+            ast::BinOp::Neq => BinOp::Neq,
+            ast::BinOp::Lt => BinOp::Lt,
+            ast::BinOp::Leq => BinOp::Leq,
+            ast::BinOp::Gt => BinOp::Gt,
+            ast::BinOp::Geq => BinOp::Geq,
+            ast::BinOp::Plus => BinOp::Add,
+            ast::BinOp::Minus => BinOp::Sub,
+            ast::BinOp::Times => BinOp::Mul,
+            ast::BinOp::Div => BinOp::Div,
+            ast::BinOp::Pow => BinOp::Pow
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Callable {
     Call(String, Vec<Val>),
     Bin(BinOp, Val, Val),
@@ -28,6 +55,7 @@ pub enum Callable {
     Access(Val, String, String),
 }
 
+#[derive(Debug, Clone)]
 pub enum Statement {
     FnCall(String, Vec<Val>),
     // Destination variable and called function
@@ -38,6 +66,7 @@ pub enum Statement {
     While(Val, Block),
 }
 
+#[derive(Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Statement>,
 }
@@ -45,6 +74,15 @@ pub struct Block {
 impl Block {
     pub fn new(stmts: Vec<Statement>) -> Self {
         Block {stmts}
+    }
+
+    pub fn push(&mut self, stmt: Statement) {
+        self.stmts.push(stmt);
+    }
+
+    pub fn extend(&mut self, stmts: Vec<Statement>) -> &mut Self {
+        self.stmts.extend(stmts);
+        self
     }
 }
 

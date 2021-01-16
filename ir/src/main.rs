@@ -2,6 +2,7 @@
 mod hir;
 mod lir;
 mod error;
+mod ast_to_hir;
 mod hir_to_lir;
 mod lir_to_asm;
 
@@ -13,8 +14,11 @@ use clap::{Arg, App, SubCommand};
 
 use hir::parsing::*;
 use lir::parsing::*;
+use ast_to_hir::*;
 use hir_to_lir::*;
 use lir_to_asm::*;
+
+use parser::parse_and_type_file;
 
 fn read_file(name: &str) -> Result<String, String> {
     let path = Path::new(name);
@@ -102,6 +106,15 @@ fn main() {
     let matches = App::new("petit-julia-ir")
         .version("1.0")
         .author("Julien Marquet, Ryan Lahfa")
+        .subcommand(SubCommand::with_name("pjulia")
+            .about("Compiles a pJulia source file")
+            .arg(Arg::with_name("input")
+                .help("The source file")
+                .required(true)
+                .index(1))
+            .arg(Arg::with_name("output")
+                .short("o")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("hir")
             .about("Compiles a HIR source file")
             .arg(Arg::with_name("input")
@@ -122,7 +135,28 @@ fn main() {
                 .takes_value(true)))
         .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("hir") {
+    if let Some(matches) = matches.subcommand_matches("pjulia") {
+        let file_name = matches.value_of("input").unwrap();
+        match read_file(file_name) {
+            Ok(s) => {
+                let res = parse_and_type_file(file_name, &s).and_then(|typed_ast| typed_ast_to_hir(typed_ast).map_err(|err| err.to_string()));
+                match res {
+                    Ok(hir) => {
+                        if let Some(file_name) = matches.value_of("output") {
+                            let lines = hir.into_iter().map(|d| d.to_string()).collect::<Vec<String>>();
+
+                            match write_file(file_name, &lines.join("\n")) {
+                                Ok(()) => (),
+                                Err(e) => println!("{}", e)
+                            }
+                        }
+                    },
+                    Err(e) => println!("{}", e)
+                }
+            },
+            Err(e) => println!("{}", e)
+        }
+    } else if let Some(matches) = matches.subcommand_matches("hir") {
         let file_name = matches.value_of("input").unwrap();
 
         let res = compile_hir(file_name);

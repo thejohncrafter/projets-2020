@@ -9,4 +9,4 @@ edition = "2018"
 clap = "2.33.3"
 automata = {path = "../automata"}
 parsergen = {path = "../parsergen"}
-
+parser = {path = "../parser"}
