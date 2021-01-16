@@ -33,6 +33,7 @@ pub struct GlobalEnvironmentState<'a> {
     pub structures: HashMap<String, Structure<'a>>,
     pub functions: HashMap<String, Vec<Function<'a>>>,
     pub function_sigs: HashMap<String, Vec<FuncSignature>>,
+    pub structure_name_by_fields: HashMap<String, String>,
     pub all_structure_fields: HashMap<String, StaticType>,
     pub all_mutable_fields: HashSet<String>,
     pub global_variables: HashSet<String>,
@@ -46,6 +47,7 @@ impl<'a> GlobalEnvironmentState<'a> {
             structures: HashMap::new(),
             functions: HashMap::new(),
             function_sigs: HashMap::new(),
+            structure_name_by_fields: HashMap::new(),
             all_structure_fields: HashMap::new(),
             all_mutable_fields: HashSet::new(),
             global_variables: HashSet::new(),
@@ -82,6 +84,7 @@ pub struct TypingContext<'a> {
     pub known_types: HashSet<StaticType>,
     pub mutable_fields: HashSet<String>,
     pub all_fields: HashMap<String, StaticType>,
+    pub structure_name_by_fields: HashMap<String, String>,
     pub previous_scope: Scope,
     pub current_scope: Scope,
     pub environment: EnvironmentMap

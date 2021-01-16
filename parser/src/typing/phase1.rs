@@ -43,6 +43,12 @@ impl<'a> IntoVisitor<'a, InternalTypingResult<'a>> for GlobalEnvironmentState<'a
                 field.ty.clone()
             );
 
+            self.structure_name_by_fields.insert(
+                fname.to_string().clone(),
+                s.name.name.clone()
+            );
+
+
             if s.mutable {
                 self.all_mutable_fields.insert(fname.to_string().clone());
             }

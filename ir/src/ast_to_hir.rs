@@ -51,12 +51,12 @@ impl Emitter {
                     None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
                     Some(p_exp) => {
                         match &p_exp.static_ty {
-                            StaticType::Struct(S) => {
+                            StaticType::Struct(s) => {
                                 let (mut stmts, st_val) = self.emit_value(&p_exp)?;
                                 let access_out = self.mk_intermediate_var();
 
                                 stmts.push(hir::Statement::Call(access_out.clone(),
-                                            hir::Callable::Access(st_val, S.clone(), lv.name.clone())));
+                                            hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
 
                                 Ok((stmts, hir::Val::Var(access_out)))
                             },
@@ -99,8 +99,24 @@ impl Emitter {
             ExpVal::Return(internal_exp) => {
                 // Evaluate internal_exp as a statement.
                 // attribute nothing value.
+                match internal_exp {
+                    None => Ok((vec![], hir::Val::Var("nothing".to_string()))),
+                    Some(actual_exp) => {
+                        self.emit_value(actual_exp)
+                    }
+                }
+            },
+            ExpVal::Call(name, args) => {
+                let out = self.mk_intermediate_var();
 
-                Ok((vec![], hir::Val::Var("nothing".to_string())))
+                let (mut stmts, vals) = self.emit_values(args)?;
+
+                stmts.push(
+                    hir::Statement::Call(out.clone(),
+                    hir::Callable::Call(name.clone(), vals))
+                );
+
+                Ok((stmts, hir::Val::Var(out)))
             },
             _ => Ok((vec![], hir::Val::Var("nothing".to_string())))
         }
@@ -243,13 +259,35 @@ impl Emitter {
         }
     }
 
-    fn emit_fn(&mut self, f: &Function) -> HIRFunctionResult {
+    fn emit_fn(&mut self, f: &Function, name: String) -> HIRFunctionResult {
         Ok(hir::Function::new(
-            f.name.clone(),
+            name,
             f.params.iter().map(|f| f.name.name.clone()).collect(),
             vec![], // FIXME: collect all assigns.
             self.emit_block(&f.body)?
         ))
+    }
+
+    fn emit_dynamic_dispatch(&mut self, name: &String, f_s: &Vec<Function>) -> HIRDeclsResult {
+        // Reset the counter.
+        self.next_intermediate_variable_id = 0;
+        if f_s.len() > 1 {
+            let mut functions = vec![];
+            for (index, f) in f_s.iter().enumerate() {
+                functions.push(hir::Decl::Function(self.emit_fn(f, format!("{}_{}", name, index).to_string())?));
+                self.next_intermediate_variable_id = 0;
+            }
+
+            // now the dynamic dispatch thunk
+            // generate condition: typeof(arg_1) == param_1 && typeof(arg_2) == param_2 && …
+            // generate blocks: call function of corresponding signature
+            // generate if/elseif/else blocks.
+            // FIXME: do it.
+
+            Ok(functions)
+        } else {
+            Ok(vec![hir::Decl::Function(self.emit_fn(f_s.first().unwrap(), name.clone())?)])
+        }
     }
 }
 
@@ -261,16 +299,16 @@ fn emit_struct_decl(s: &Structure) -> HIRStructDeclResult {
 
 pub fn typed_ast_to_hir(t_ast: TypedDecls) -> HIRDeclsResult {
     let mut compiled = Vec::new();
-    let _emitter = Emitter::init();
+    let mut emitter = Emitter::init();
 
     for s in t_ast.structures.values() {
         compiled.push(hir::Decl::Struct(emit_struct_decl(s)?));
     }
 
     // generate dynamic dispatch thunk.
-    //for f in t_ast.functions {
-    //    compiled.push(hir::Decl::Function(emitter.emit_fn(f)?));
-    //}
+    for (name, f_s) in t_ast.functions {
+        compiled.extend(emitter.emit_dynamic_dispatch(&name, &f_s)?);
+    }
 
     // FIXME: build an adhoc thunk for global expressions as a main function.
     
