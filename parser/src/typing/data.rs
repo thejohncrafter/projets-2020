@@ -4,11 +4,21 @@ use crate::ast::*;
 
 use automata::read_error::ReadError;
 
-pub type ReturnVerification<'a> = Result<(), ReadError<'a>>;
+pub type EnvironmentMap = HashMap<String, Vec<EnvVariable>>;
 pub type FuncSignature = (StaticType, Vec<StaticType>);
+pub type InternalTypingResult<'a> = Result<(), ReadError<'a>>;
+pub type PartialTypingResult<'a> = Result<StaticType, ReadError<'a>>;
+pub type TypingResult<'a> = Result<TypedDecls<'a>, ReadError<'a>>;
 
 pub fn is_compatible(a: StaticType, b: StaticType) -> bool {
     a == StaticType::Any || b == StaticType::Any || a == b
+}
+
+pub fn is_builtin_function(name: &String) -> bool {
+    match name.as_str() {
+        "println" | "div" | "print" => true,
+        _ => false
+    }
 }
 
 #[derive(Debug)]
@@ -40,8 +50,28 @@ impl<'a> GlobalEnvironmentState<'a> {
             all_mutable_fields: HashSet::new(),
             global_variables: HashSet::new(),
             global_expressions: vec![],
-            known_types: HashSet::new()
+            known_types: vec![StaticType::Any, StaticType::Str, StaticType::Bool, StaticType::Int64, StaticType::Nothing].into_iter().collect()
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct EnvVariable {
+    ty: StaticType,
+    scope: Scope
+}
+
+impl EnvVariable {
+    pub fn init() -> Self {
+        EnvVariable { ty: StaticType::Any, scope: Scope::Global }
+    }
+
+    pub fn local() -> Self {
+        EnvVariable { scope: Scope::Local, ..EnvVariable::init() }
+    }
+
+    pub fn typed(ty: StaticType) -> Self {
+        EnvVariable { ty, ..EnvVariable::init() }
     }
 }
 
@@ -52,7 +82,9 @@ pub struct TypingContext<'a> {
     pub known_types: HashSet<StaticType>,
     pub mutable_fields: HashSet<String>,
     pub all_fields: HashMap<String, StaticType>,
-    pub environment: HashMap<String, Vec<StaticType>>
+    pub previous_scope: Scope,
+    pub current_scope: Scope,
+    pub environment: EnvironmentMap
 }
 
 impl<'a> TypingContext<'a> {
@@ -74,23 +106,67 @@ impl<'a> TypingContext<'a> {
         }
     }
 
-    pub fn push_to_env(&mut self, ident: &LocatedIdent<'a>, ty: StaticType) {
+    pub fn enter_in_local_scope(&mut self) {
+        self.previous_scope = self.current_scope;
+        self.current_scope = Scope::Local;
+    }
+
+    pub fn restore_previous_scope(&mut self) {
+        self.current_scope = self.previous_scope;
+    }
+
+    pub fn push_to_env(&mut self, ident: &LocatedIdent<'a>, ty: StaticType, scope: Scope) {
         self.environment
             .entry(ident.name.clone())
             .or_default()
-            .push(ty);
+            .push(EnvVariable { ty, scope });
     }
 
     pub fn push_local_to_env(&mut self, ident: &LocatedIdent<'a>) {
-        self.push_to_env(&ident, StaticType::Any);
+        self.push_to_env(&ident, StaticType::Any, Scope::Local);
+    }
+
+    pub fn extend_local_env(&mut self, idents: Vec<LocatedIdent<'a>>) -> Vec<LocatedIdent<'a>> {
+        idents.iter().for_each(|var| self.push_local_to_env(&var));
+        idents
     }
 
     pub fn pop_from_env(&mut self, ident: &LocatedIdent<'a>) {
-        let types = self.environment.get_mut(&ident.name).unwrap();
-        types.pop();
+        match self.environment.get_mut(&ident.name) {
+            None => {
+                println!("warning: Attempt to pop from environment the variable: {}", &ident.name);
+            },
+            Some(types) => {
+                types.pop();
 
-        if types.len() == 1 {
-            self.environment.remove(&ident.name);
+                if types.len() == 0 {
+                    self.environment.remove(&ident.name);
+                }
+            }
+        }
+    }
+
+    pub fn unextend_env(&mut self, idents: Vec<LocatedIdent<'a>>) {
+        idents.iter().for_each(|var| self.pop_from_env(&var));
+    }
+
+    pub fn type_from_env_name(&mut self, name: &String) -> Option<StaticType> {
+        match self.environment.get(name) {
+            None => None,
+            Some(vars) => match vars.last() {
+                None => None,
+                Some(var) => Some(var.ty.clone())
+            }
+        }
+    }
+
+    pub fn scope_from_env_name(&mut self, name: &String) -> Option<Scope> {
+        match self.environment.get(name) {
+            None => None,
+            Some(vars) => match vars.last() {
+                None => None,
+                Some(var) => Some(var.scope)
+            }
         }
     }
 
@@ -98,91 +174,3 @@ impl<'a> TypingContext<'a> {
         self.environment.get(&ident.name).is_some()
     }
 }
-
-pub type InternalTypingResult<'a> = Result<(), ReadError<'a>>;
-pub type PartialTypingResult<'a> = Result<StaticType, ReadError<'a>>;
-
-pub type TypingResult<'a> = Result<TypedDecls<'a>, ReadError<'a>>;
-
-pub type ElseTypingResult<'a> = Result<StaticType, ReadError<'a>>;
-pub type ExprTypingResult<'a> = Result<(), ReadError<'a>>;
-pub type BlockTypingResult<'a> = Result<(), ReadError<'a>>;
-
-pub fn is_builtin_function(name: &String) -> bool {
-    match name.as_str() {
-        "println" | "div" | "print" => true,
-        _ => false
-    }
-}
-
-pub fn convert_to_static_type(p: Option<&LocatedIdent>) -> Option<StaticType> {
-    match p {
-        None => None,
-        Some(lident) => {
-            Some(match lident.name.as_str() {
-                "Any" => StaticType::Any,
-                "Nothing" => StaticType::Nothing,
-                "Int64" => StaticType::Int64,
-                "Bool" => StaticType::Bool,
-                "String" => StaticType::Str,
-                _ => StaticType::Struct(lident.name.clone())
-            })
-        }
-    }
-}
-
-pub fn collect_all_assign_in_array<'a>(a: &Vec<Exp<'a>>) -> Vec<String> {
-    a.iter().flat_map(collect_all_assign).collect()
-}
-
-pub fn collect_all_assign<'a>(e: &Exp<'a>) -> Vec<String> {
-    fn collect_else<'a>(u: &Else<'a>) -> Vec<String> {
-        match u.val.as_ref() {
-            ElseVal::End => vec![],
-            ElseVal::Else(b) => collect_all_assign_in_array(&b.val),
-            ElseVal::ElseIf(e, b, rest_) => collect_all_assign(&e)
-                .into_iter()
-                .chain(collect_all_assign_in_array(&b.val).into_iter())
-                .chain(collect_else(&rest_).into_iter())
-                .collect()
-        }
-    }
-
-    // Perform a DFS on e to smoke out all Assign
-    match e.val.as_ref() {
-        ExpVal::Return(e) => match e {
-            None => vec![],
-            Some(e) => collect_all_assign(&e)
-        },
-        ExpVal::Assign(lv, e) => {
-            let mut assigns = collect_all_assign(&e);
-            match lv.in_exp {
-                None => assigns.push(lv.name.clone()),
-                _ => {}
-            };
-            assigns
-        },
-        ExpVal::BinOp(_, alpha, beta) => collect_all_assign(&alpha)
-            .into_iter()
-            .chain(collect_all_assign(&beta).into_iter())
-            .collect(),
-        ExpVal::UnaryOp(_, e) => collect_all_assign(&e),
-        ExpVal::Call(_, e_s) => collect_all_assign_in_array(&e_s),
-        ExpVal::Block(b) | ExpVal::LMul(_, b) => collect_all_assign_in_array(&b.val),
-        ExpVal::RMul(e, _) => collect_all_assign(&e),
-        ExpVal::If(e, b, else_branch) => collect_all_assign(&e)
-            .into_iter()
-            .chain(collect_all_assign_in_array(&b.val).into_iter())
-            .chain(collect_else(&else_branch).into_iter())
-            .collect(),
-        ExpVal::For(_, _, _) | ExpVal::While(_, _) => vec![], 
-        ExpVal::Int(_) | ExpVal::Str(_) | ExpVal::Bool(_) | ExpVal::Mul(_, _) => vec![],
-        ExpVal::LValue(lv) => {
-            match &lv.in_exp {
-                None => vec![],
-                Some(e) => collect_all_assign(e)
-            }
-        }
-    }
-}
-

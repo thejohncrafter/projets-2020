@@ -1,6 +1,6 @@
-use std::collections::HashSet;
 use super::data::*;
-use super::func_signatures::is_this_call_ambiguous;
+use super::func_signatures::{is_this_call_ambiguous, format_signature, compute_ambiguous_signature};
+use super::assign::{collect_all_assign_in_array};
 use crate::ast::*;
 use std::fmt;
 
@@ -20,7 +20,7 @@ fn is_one_of_or_any<'a>(alpha: &'a Exp<'a>, ts: &[StaticType]) -> bool {
 
 pub fn type_block<'a>(tcx: &mut TypingContext<'a>, block: &mut Block<'a>) -> InternalTypingResult<'a> {
     for exp in &mut block.val {
-        type_expression(tcx, exp);
+        type_expression(tcx, exp)?;
     }
 
     if block.trailing_semicolon {
@@ -33,16 +33,20 @@ pub fn type_block<'a>(tcx: &mut TypingContext<'a>, block: &mut Block<'a>) -> Int
     Ok(())
 }
 
-fn type_else<'a>(tcx: &mut TypingContext<'a>, else_: &mut Else<'a>) -> ElseTypingResult<'a> {
+fn type_else<'a>(tcx: &mut TypingContext<'a>, else_: &mut Else<'a>) -> PartialTypingResult<'a> {
     match else_.val.as_mut() {
         ElseVal::End => Ok(StaticType::Nothing),
         ElseVal::Else(block) => {
+            tcx.enter_in_local_scope();
             type_block(tcx, block)?;
+            tcx.restore_previous_scope();
             Ok(block.static_ty.clone())
         },
         ElseVal::ElseIf(e, block, else_) => {
             type_expression(tcx, e)?;
+            tcx.enter_in_local_scope();
             type_block(tcx, block)?;
+            tcx.restore_previous_scope();
             let ret = type_else(tcx, else_)?;
             if ret == block.static_ty {
                 Ok(block.static_ty.clone())
@@ -78,10 +82,12 @@ fn type_user_function<'a>(tcx: &mut TypingContext<'a>, span: &Span<'a>, name: &S
     if let Some(ty) = tcx.get_potentially_unique_return_type_for_function(&name) {
         Ok(ty)
     } else {
+        let st_args: Vec<StaticType> = args.iter().map(|arg| arg.static_ty.clone()).collect();
         // Ambiguity detection for functions.
-        if tcx.functions.contains_key(name) && is_this_call_ambiguous(args.iter().map(|arg| arg.static_ty.clone()).collect(), &tcx.functions[name]) {
+        if tcx.functions.contains_key(name) && is_this_call_ambiguous(st_args.clone(), &tcx.functions[name]) {
                 return Err(
-                    (span.clone(), format!("Ambiguous call to function '{}', cannot be resolve at runtime through dynamic dispatch", &name).to_string()).into()
+                    (span.clone(), format!("Ambiguous call to function '{} ({})', cannot be resolve at runtime through dynamic dispatch", &name,
+                    compute_ambiguous_signature(st_args, &tcx.functions[name]).and_then(|s| Some(format_signature(s))).unwrap_or("no information on the signature".to_string())).to_string()).into()
                 );
         }
 
@@ -93,21 +99,22 @@ fn type_user_function<'a>(tcx: &mut TypingContext<'a>, span: &Span<'a>, name: &S
 pub fn type_simple_assign<'a>(tcx: &mut TypingContext<'a>, lv: &mut LValue<'a>, e: &mut Exp<'a>) -> InternalTypingResult<'a> {
     type_expression(tcx, e)?;
 
-    if !tcx.environment.contains_key(&lv.name) {
-        return Err(
-            (lv.span, format!("Compiler error, '{}' was not found in the global typing context, unreachable variable. Environment was {:?}", &lv.name, tcx.environment).to_string()).into()
-        );
+    match tcx.type_from_env_name(&lv.name) {
+        None => {
+            return Err(
+                (lv.span, format!("Compiler error, '{}' was not found in the global typing context, unreachable variable. Environment was {:?}", &lv.name, tcx.environment).to_string()).into()
+            );
+        },
+        Some(st) => {
+            if !is_compatible(st.clone(), e.static_ty.clone()) {
+                return Err(
+                    (e.span, format!("Expected on the lhs '{}' type, found: '{}' on the rhs", st, e.static_ty).to_string()).into()
+                );
+            }
+        }
     }
 
-    /*if !is_compatible(tcx.environment[&lv.name].last().and_then(|t| t.as_ref()),
-        e.static_ty.as_ref()) {
-        // FIXME(Ryan): improve scoping system drastically. this is definitely
-        // not an acceptable way to proceed.
-        //return Err(
-        //    (e.span, format!("This expression has type '{:?}' but is incompatible with '{:?}' (expected)", e.static_ty, tcx.environment[&lv.name].last().unwrap()).to_string()).into()
-        //);
-    }
-
+    /*
     // Only replace the type if it improves it.
     let current_type = tcx.environment.get_mut(&lv.name).unwrap().pop();
     match current_type {
@@ -158,7 +165,7 @@ fn raise_no_such_operation_err<'a, T: fmt::Display>(span: Span<'a>, op: T, ts: V
     Err((span, format!(
                 "No such operation '{}' for signature ({})", 
                 op,
-                ts.into_iter().map(|t| t.to_string()).collect::<Vec<String>>().join(",").to_string()
+                format_signature(ts.into_iter().cloned().collect())
         )).into())
 }
 
@@ -281,13 +288,16 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
         ExpVal::LValue(lv) => {
             match lv.in_exp.as_mut() {
                 None => {
-                    match tcx.environment.get(&lv.name).and_then(|types| types.last()) {
+                    match tcx.type_from_env_name(&lv.name).zip(tcx.scope_from_env_name(&lv.name)) {
                         None => { 
                             return Err(
                                 (lv.span, format!("No variable named '{}' is declared in this scope", &lv.name).to_string()).into()
                             );
                         },
-                        Some(st) => expr.static_ty = st.clone()
+                        Some((st, scope)) => {
+                            lv.scope = scope;
+                            expr.static_ty = st
+                        }
                     }
                 },
                 Some(e) => {
@@ -306,6 +316,7 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
                     }
 
                     expr.static_ty = tcx.all_fields[&lv.name].clone();
+                    lv.scope = Scope::Local;
                 }
             }
         },
@@ -344,7 +355,10 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
                 );
             }
 
+            tcx.enter_in_local_scope();
             type_block(tcx, block)?;
+            tcx.restore_previous_scope();
+
             let ret_ty = type_else(tcx, else_)?;
 
             if block.static_ty != ret_ty {
@@ -357,42 +371,27 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
             type_expression(tcx, &mut range.start)?;
             type_expression(tcx, &mut range.end)?;
 
-            let local_extra_vars: Vec<String> = vec![]; //collect_all_assign_in_array(&block.val);
-            for var in &local_extra_vars {
-                tcx.push_local_to_env(&LocatedIdent::new(ident.span, var.clone())); // FIXME: this is a fake span.
-            }
-            tcx.push_to_env(&ident, StaticType::Int64);
+            let local_extra_vars = tcx.extend_local_env(collect_all_assign_in_array(&block.val));
+            tcx.push_to_env(&ident, StaticType::Int64, Scope::Local);
+            tcx.enter_in_local_scope();
 
             type_block(tcx, block)?;
 
+            tcx.restore_previous_scope();
             tcx.pop_from_env(&ident);
-            for var in local_extra_vars {
-                tcx.pop_from_env(&LocatedIdent::new(ident.span, var.clone()));
-            }
+            tcx.unextend_env(local_extra_vars);
         },
         ExpVal::While(e, block) => {
             type_expression(tcx, e)?;
 
             if is_any_or(e, StaticType::Bool) {
-                let local_extra_vars: Vec<String> = vec![]; //collect_all_assign_in_array(&block.val);
-                let mut out_of_scope_vars: HashSet<String> = HashSet::new(); 
-
-                for var in &local_extra_vars {
-                    if !tcx.environment.contains_key(var) {
-                        tcx.push_local_to_env(&LocatedIdent::new(e.span, var.clone()));
-                    } else {
-                        println!("DEBUG: '{}' is out of scope, so it will not be destroyed (state: '{:?}'.", var, tcx.environment[var]);
-                        out_of_scope_vars.insert(var.clone());
-                    }
-                }
+                let local_extra_vars = tcx.extend_local_env(collect_all_assign_in_array(&block.val));
+                tcx.enter_in_local_scope();
 
                 type_block(tcx, block)?;
 
-                for var in local_extra_vars {
-                    if !out_of_scope_vars.contains(&var) {
-                        tcx.pop_from_env(&LocatedIdent::new(e.span, var));
-                    }
-                }
+                tcx.restore_previous_scope();
+                tcx.unextend_env(local_extra_vars);
 
                 expr.static_ty = StaticType::Nothing;
             } else {

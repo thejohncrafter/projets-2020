@@ -26,9 +26,16 @@ impl<'a> Param<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Scope {
+    Global,
+    Local
+}
+
 #[derive(Debug)]
 pub struct LValue<'a> {
     pub span: Span<'a>,
+    pub scope: Scope,
     pub in_exp: Option<Exp<'a>>,
     pub name: String,
 }
@@ -39,6 +46,7 @@ impl<'a> LValue<'a> {
             span,
             in_exp,
             name,
+            scope: Scope::Global
         }
     }
 }

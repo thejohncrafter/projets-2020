@@ -14,7 +14,3 @@ pub trait IntoVisitor<'a, T> {
     fn visit_structure(&mut self, s: Structure<'a>) -> T;
     fn visit_expression(&mut self, e: Exp<'a>) -> T;
 }
-
-pub trait ExpressionVisitor<'a, T> {
-    fn visit_expression(&mut self, e: &'a Exp<'a>) -> T;
-}

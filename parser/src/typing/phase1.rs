@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use crate::ast::{Structure, Function, Exp, StaticType};
 use super::data::*;
 use super::visit::IntoVisitor;
-use super::func_signatures::{build_signature, is_callable_with_exactly};
+use super::assign::collect_all_assign;
+use super::func_signatures::{build_signature, is_callable_with_exactly, format_signature};
 
 fn is_reserved_name(n: &String) -> bool {
     match n.as_str() {
@@ -59,12 +60,12 @@ impl<'a> IntoVisitor<'a, InternalTypingResult<'a>> for GlobalEnvironmentState<'a
 
         if is_reserved_name(&f.name) {
             return Err(
-                (f.span, format!("Ident '{}' is a reserved name, it cannot be used as a function name", f.name).to_string()).into()
+                (f.span, format!("The ident '{}' is a reserved name, it cannot be used as a function name", f.name).to_string()).into()
             );
         }
         
         if !self.known_types.contains(&f.ret_ty) {
-            return Err((f.span, format!("The return type of '{}' is malformed, either it's not a primitive or a declared structure", f.name).to_string()).into());
+            return Err((f.span, format!("The return type '{}' of '{}' is malformed, either it's not a primitive or a declared structure", f.ret_ty, f.name).to_string()).into());
         }
 
         let mut names: HashSet<String> = HashSet::new();
@@ -89,7 +90,11 @@ impl<'a> IntoVisitor<'a, InternalTypingResult<'a>> for GlobalEnvironmentState<'a
         for sig in self.function_sigs.entry(f.name.clone()).or_default() {
             if is_callable_with_exactly(f.params.iter().map(|arg| arg.ty.clone()).collect(), &sig) {
                 return Err(
-                    (f.span, "This function is already defined or the types are too ambiguous".to_string()).into()
+                    (f.span, format!(
+                            "The function '{}' has already been defined with the exact same signature ({}), add type annotations to disambiguate or remove duplicates",
+                            f.name,
+                            format_signature(f.params.into_iter().map(|arg| arg.ty).collect())
+                    ).to_string()).into()
                 );
             }
         }
@@ -102,7 +107,7 @@ impl<'a> IntoVisitor<'a, InternalTypingResult<'a>> for GlobalEnvironmentState<'a
 
     fn visit_expression(&mut self, ge: Exp<'a>) -> InternalTypingResult<'a> {
         //  If it's a global expression, check all Assign nodes and add them.
-        self.global_variables.extend(collect_all_assign(&ge).into_iter());
+        self.global_variables.extend(collect_all_assign(&ge).into_iter().map(|l_ident| l_ident.name));
         self.global_expressions.push(ge);
 
         Ok(())

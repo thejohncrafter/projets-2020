@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::ast::*;
 use super::data::*;
 use super::fill::{type_expression, type_block};
 //use super::fill;
 use super::visit::IntoVisitor;
-// use super::returns::verify_returns;
+use super::returns::{verify_explicit_returns, verify_implicit_return};
+use super::assign::collect_all_assign_in_array;
 
-fn to_env(known: &HashSet<String>) -> HashMap<String, Vec<StaticType>> {
-    known.into_iter().map(|t| (t.clone(), vec![StaticType::Any])).collect()
+fn to_env(known: &HashSet<String>) -> EnvironmentMap {
+    known.into_iter().map(|t| (t.clone(), vec![EnvVariable::init()])).collect()
 }
 
 pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
@@ -26,7 +26,7 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
     environment
         .entry("nothing".to_string())
         .or_default()
-        .push(StaticType::Nothing);
+        .push(EnvVariable::typed(StaticType::Nothing));
 
     // Step 2.
     // Iterate over all declarations.
@@ -37,6 +37,8 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
         known_types: global_state.known_types,
         mutable_fields: global_state.all_mutable_fields,
         all_fields: global_state.all_structure_fields,
+        current_scope: Scope::Global,
+        previous_scope: Scope::Global,
         environment
     };
 
@@ -52,45 +54,20 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
     for funcs in global_state.functions.values_mut() {
         for func in funcs {
             for arg in &func.params {
-                global_ctx.push_to_env(&arg.name, arg.ty.clone());
+                global_ctx.push_to_env(&arg.name, arg.ty.clone(), Scope::Local);
             }
 
-            let extra_local_vars: Vec<LocatedIdent> = vec![];//collect_all_assign_in_array(&func.body.val);
-            for var in &extra_local_vars {
-                // No need to pollute and get inferior types.
-                if !global_ctx.environment.contains_key(&var.name) || var.name == "nothing" {
-                    global_ctx.push_local_to_env(var);
-                }
-            }
-
+            let extra_local_vars = global_ctx.extend_local_env(collect_all_assign_in_array(&func.body.val));
+            
             type_block(&mut global_ctx, &mut func.body)?;
-            // global_ctx.verify_returns(&func);
-
-            /*if let Some(ret_ty) = convert_to_static_type(func.ret_ty.as_ref()) {
-                // Implicit return.
-                if !func.body.trailing_semicolon && func.body.val.len() > 0 && !is_compatible(func.body.val.last().unwrap().static_ty.as_ref(), Some(&ret_ty)) {
-                    return Err(
-                        (func.body.val.last().unwrap().span, format!("Invalid implicit return type, expected '{:?}', found '{:?}'",
-                                                                     func.body.val.last().unwrap().static_ty,
-                                                                     ret_ty).to_string()).into()
-                    );
-                }
-                // Explicit returns.
-                verify_returns(&func.body, ret_ty)?;
-            }*/
-
+            verify_implicit_return(&func)?;
+            verify_explicit_returns(&func.body, func.ret_ty.clone())?;
 
             for arg in &func.params {
                 global_ctx.pop_from_env(&arg.name);
             }
 
-            for var in extra_local_vars {
-                if global_ctx.is_alive_in_env(&var) {
-                    global_ctx.pop_from_env(&var);
-                } else {
-                    println!("WARNING: '{:?}' was already deleted!", &var);
-                }
-            }
+            global_ctx.unextend_env(extra_local_vars);
         }
     }
 
