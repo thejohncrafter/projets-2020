@@ -7,12 +7,12 @@ fn fact(n)
     not_zero <- n != 0;
     jumpif not_zero not_zero;
 zero:
-    return 1, 0;
+    return 0, 1;
 not_zero:
     prev <- n - 1;
-    (k, prev) <- call fact(prev);
+    (prev, k) <- call fact(prev);
     val <- k * n;
-    return val, 0;
+    return 0, val;
 }
 
 fn print_test_val()
@@ -25,11 +25,11 @@ fn main()
     vars: a, _;
 {
     call native native_print_string(3, "fact :");
-    (a, _) <- call fact(5);
+    (_, a) <- call fact(5);
     call native native_print_int(1, a);
 
     call native native_print_string(3, "pow :");
-    (test_val, _) <- call native native_pow(1, 2, 1, 6);
-    call native native_print_int(1, a);
+    (_, test_val) <- call native native_pow(1, 2, 1, 6);
+    call print_test_val();
 }
 
