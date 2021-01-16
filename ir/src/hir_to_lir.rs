@@ -168,9 +168,9 @@ impl<'a> LocalRegistry<'a> {
         match val {
             hir::Val::Nothing => {
                 Ok(CompiledVal::new(
-                        lir::Val::Var("nothing".to_string()),
-                        lir::Val::Var("nothing".to_string())
-                )) // FIXME(Ryan): plz can u fix?
+                    self.parent.get_ty_id(&ConcreteType::Nothing)?,
+                    lir::Val::Const(0),
+                ))
             },
             hir::Val::Var(name) => {
                 let data = self.get_var(name)?;
@@ -241,7 +241,6 @@ fn compile_call(
                 hir::BinOp::Sub => (ConcreteType::Int64, lir::BinOp::Sub),
                 hir::BinOp::Mul => (ConcreteType::Int64, lir::BinOp::Mul),
                 hir::BinOp::Div => (ConcreteType::Int64, lir::BinOp::Div),
-                hir::BinOp::Pow => (ConcreteType::Int64, lir::BinOp::Mul) // FIXME(Ryan): plz can u fix?
             };
 
             out.push(lir::Statement::Inst(

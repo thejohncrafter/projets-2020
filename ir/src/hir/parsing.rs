@@ -439,6 +439,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl>,
                 Ok(Val::Str($s))
             },
 
+            (ty -> LPAR RPAR) => {Ok(Type::Nothing)},
             (ty -> INT64) => {Ok(Type::Int64)},
             (ty -> BOOL) => {Ok(Type::Bool)},
             (ty -> STR) => {Ok(Type::Str)},

@@ -51,8 +51,43 @@ impl Emitter {
                 let (stmts_b, val_b) = self.emit_value(b)?;
                 let mut stmts = stmts_a.into_iter().chain(stmts_b).collect::<Vec<_>>();
                 let out = self.mk_intermediate_var();
-                stmts.push(hir::Statement::Call(out.clone(),
-                        hir::Callable::Bin(hir::BinOp::from(*op), val_a, val_b)));
+
+                enum NativeOrSoft {
+                    Native(hir::BinOp),
+                    Soft(String),
+                }
+
+                use NativeOrSoft::*;
+
+                let action = match op {
+                    BinOp::And => Native(hir::BinOp::And),
+                    BinOp::Or => Native(hir::BinOp::Or),
+                    BinOp::Equ => Native(hir::BinOp::Equ),
+                    BinOp::Neq => Native(hir::BinOp::Neq),
+                    BinOp::Lt => Native(hir::BinOp::Lt),
+                    BinOp::Leq => Native(hir::BinOp::Leq),
+                    BinOp::Gt => Native(hir::BinOp::Gt),
+                    BinOp::Geq => Native(hir::BinOp::Geq),
+                    BinOp::Plus => Native(hir::BinOp::Add),
+                    BinOp::Minus => Native(hir::BinOp::Sub),
+                    BinOp::Times => Native(hir::BinOp::Mul),
+                    BinOp::Div => Native(hir::BinOp::Div),
+                    BinOp::Pow => Soft("pow".to_string()),
+                };
+                
+                let callable = match action {
+                    Native(op) => {
+                        hir::Callable::Bin(op, val_a, val_b)
+                    },
+                    Soft(fn_name) => {
+                        // FIXME(Julien): use something like NativeCall
+                        // hir::Callable::Call(fn_name, vec!(val_a, val_b))
+                        todo!()
+                    },
+                };
+
+                stmts.push(hir::Statement::Call(out.clone(), callable));
+
                 Ok((stmts, hir::Val::Var(out)))
             },
             ExpVal::Block(block) => self.emit_block_value(block),

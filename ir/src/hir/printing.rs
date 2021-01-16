@@ -17,7 +17,7 @@ impl std::fmt::Display for Type {
                 write!(f, "Struct {}", id)
             },
             Type::Nothing => {
-                write!(f, "Nothing")
+                write!(f, "()")
             }
         }
     }
@@ -73,8 +73,7 @@ impl std::fmt::Display for Callable {
                     (Add, "+"),
                     (Sub, "-"),
                     (Mul, "*"),
-                    (Div, "%"),
-                    (Pow, "^")
+                    (Div, "%")
                 );
             },
             Callable::Assign(v) => {
