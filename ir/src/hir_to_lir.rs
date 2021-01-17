@@ -538,7 +538,8 @@ fn compile_fn(
     global: &GlobalRegistry,
     f: &hir::Function
 ) -> Result<lir::Function, Error> {
-    let mut local = LocalRegistry::new(&global, &f.vars);
+    let vars_and_params: Vec<String> = f.vars.iter().chain(f.args.iter()).cloned().collect();
+    let mut local = LocalRegistry::new(&global, &vars_and_params);
     let mut lbl_gen = LabelGenerator::new();
 
     let body = compile_block(&mut lbl_gen, &global, &mut local, &f.body)?;
