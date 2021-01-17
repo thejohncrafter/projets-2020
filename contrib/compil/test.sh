@@ -159,8 +159,7 @@ for f in exec/*.jl; do
     if compile $f -o $binary; then
 	rm -f out
 	score_comp=`expr $score_comp + 1`;
-        status=`eval "./$binary > out"`;
-        if $status; then
+        if eval "./$binary > out"; then
 	    score_out=`expr $score_out + 1`;
 	    if cmp --quiet out $expected; then
 		score_test=`expr $score_test + 1`;
@@ -193,8 +192,7 @@ for f in exec-fail/*.jl; do
     max=`expr $max + 1`;
     if compile $f -o $binary; then
 	score_comp=`expr $score_comp + 1`;
-        status=`eval "./$binary > out"`;
-        if $status; then
+        if eval "./$binary > out"; then
 	    echo
 	    echo "ECHEC : devrait échouer sur $f"
 	else
