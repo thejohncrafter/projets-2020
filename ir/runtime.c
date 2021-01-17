@@ -12,6 +12,18 @@
 
 // Assuming a 64-bits machine, we get 64 bits long pointers.
 
+void native_div(int64_t *ret_ty, int64_t *ret_val, int64_t ty_1, int64_t val_1, int64_t ty_2, int64_t val_2) {
+    if(ty_1 != TYPE_INT64 && ty_2 == TYPE_INT64) {
+        fprintf(stderr, "Expected two Int64 for div.\n");
+        exit(1);
+    }
+
+    int64_t res = val_1 / val_2;
+
+    *ret_ty = TYPE_INT64;
+    *ret_val = res;
+}
+
 void native_print_nothing(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t _) {
     if (ty != TYPE_NOTHING) {
         fprintf(stderr, "Expected a Nothing for print_nothing.\n");

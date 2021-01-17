@@ -108,9 +108,13 @@ impl Emitter {
     fn emit_div_function(&mut self) -> HIRFunctionResult {
         let stmts = vec![hir::Statement::Call(
                 self.renamer.get_lvalue("out".to_string()),
-                hir::Callable::Bin(hir::BinOp::Mod,
-                    self.renamer.get_val("num".to_string()),
-                    self.renamer.get_val("denom".to_string())
+                hir::Callable::Call(
+                    "div".to_string(),
+                    true,
+                    vec!(
+                        self.renamer.get_val("num".to_string()),
+                        self.renamer.get_val("denom".to_string()),
+                    )
                 )
             ),
             hir::Statement::Return(self.renamer.get_val("out".to_string()))

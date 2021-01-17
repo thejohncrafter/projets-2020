@@ -202,7 +202,7 @@ fn inst_to_asm(
                 BinOp::Mod => {
                     writeln!(asm, "\tcqto")?;
                     writeln!(asm, "\tidivq %rbx")?;
-                    writeln!(asm, "\tmovq %rax, %rdx")?;
+                    writeln!(asm, "\tmovq %rdx, %rax")?;
                 },
             }
 
