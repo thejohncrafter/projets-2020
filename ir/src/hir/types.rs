@@ -1,5 +1,3 @@
-
-use parser::ast as ast;
 use std::iter::FromIterator;
 
 #[derive(Debug, Clone)]

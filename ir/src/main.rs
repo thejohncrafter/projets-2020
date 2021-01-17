@@ -139,9 +139,7 @@ fn main() {
                 match res {
                     Ok(hir) => {
                         if let Some(file_name) = matches.value_of("output") {
-                            let lines = hir.into_iter().map(|d| d.to_string()).collect::<Vec<String>>();
-
-                            match write_file(file_name, &lines.join("\n")) {
+                            match write_file(file_name, &hir.to_string()) {
                                 Ok(()) => (),
                                 Err(e) => println!("{}", e)
                             }
