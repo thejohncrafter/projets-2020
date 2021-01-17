@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
+use std::process::{Command, Stdio};
+
 use clap::{Arg, App};
 
 use ir::ast_to_hir::typed_ast_to_hir;
@@ -62,8 +64,63 @@ fn compile_to_asm(file_name: &str, output: &str, debug_hir: bool, debug_lir: boo
     Ok(asm_repr)
 }
 
-fn compile(input: &str, output: &str, _parse_only: bool, _type_only: bool, debug_hir: bool, debug_lir: bool) -> Result<(), String> {
-    compile_to_asm(input, output, debug_hir, debug_lir).and_then(|asm| write_file(&format!("{}.asm", output), &asm))
+fn compile(input: &str,
+    output: &str,
+    _parse_only: bool,
+    _type_only: bool,
+    asm_only: bool, 
+    debug_hir: bool, debug_lir: bool,
+    runtime_object_filename: &str) -> Result<(), String> {
+    let asm = compile_to_asm(input, output, debug_hir, debug_lir)?;
+    let asm_filename = format!("{}.s", output);
+    write_file(&asm_filename, &asm)?;
+
+    if !asm_only {
+        // run `as` on asm file to provide object file.
+        // use runtime object file.
+        // compile test to binary.
+
+        let user_object_filename = format!("{}.o", output);
+
+        let assembling = Command::new("as")
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .arg(asm_filename)
+            .arg("-o")
+            .arg(user_object_filename.clone())
+            .output()
+            .expect("Failed to transform asm into object file!");
+
+        if !assembling.status.success() {
+            return Err("Fatal error: Failed to transform asm into object file!".into());
+        }
+
+        let mixing = Command::new("gcc")
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .arg("-no-pie")
+            .arg("-lm")
+            .arg(user_object_filename)
+            .arg(runtime_object_filename)
+            .arg("-o")
+            .arg(output)
+            .output()
+            .expect("Fatal error: Failed to transform object files into ELF binaries!");
+
+        if !mixing.status.success() {
+            return Err("Failed to transform object files into ELF binaires!".into());
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_suffix<'a>(s: &'a str, p: &str) -> &'a str {
+    if s.ends_with(p) {
+        &s[..s.len() - p.len()]
+    } else {
+        s
+    }
 }
 
 fn main() {
@@ -83,6 +140,13 @@ fn main() {
         .arg(Arg::with_name("type-only")
             .short("t")
             .help("Parse the input and type it"))
+        .arg(Arg::with_name("asm-only")
+            .short("a")
+            .help("Parse the input, type it and output the ASM by traversing all IR"))
+        .arg(Arg::with_name("runtime-object-filename")
+            .short("r")
+            .help("Pass a runtime object filename for the native pJulia API")
+            .takes_value(true))
         .arg(Arg::with_name("debug-hir")
             .short("h")
             .help("Create a file based on the output filename with the HIR representation"))
@@ -93,18 +157,22 @@ fn main() {
 
     let success = {
         let input_filename = matches.value_of("input").unwrap();
-        let output_filename = matches.value_of("output").unwrap_or("a");
+        let output_filename = matches.value_of("output").unwrap_or(remove_suffix(input_filename, ".jl"));
+        let runtime_object_filename = matches.value_of("runtime-object-filename").unwrap_or("runtime.o");
 
         let parse_only = matches.is_present("parse-only");
         let type_only = matches.is_present("type-only");
+        let asm_only = matches.is_present("asm-only");
         let debug_hir = matches.is_present("debug-hir");
         let debug_lir = matches.is_present("debug_lir");
 
         let res = compile(input_filename, output_filename,
             parse_only,
             type_only,
+            asm_only,
             debug_hir,
-            debug_lir);
+            debug_lir,
+            runtime_object_filename);
 
         match res {
             Ok(()) => true,

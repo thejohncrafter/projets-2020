@@ -578,15 +578,15 @@ pub fn hir_to_lir(hir: &hir::Source) -> Result<lir::Source, Error> {
 
     let global = GlobalRegistry::new(&hir.globals, &structs, &functions);
 
-    let main_fn = match hir.decls.iter().find_map(|d| {
+    match hir.decls.iter().find_map(|d| {
             match d {
-                hir::Decl::Function(f) if f.name == "main" => Some(f),
+                hir::Decl::Function(f) if f.name == hir.entrypoint => Some(f),
                 _ => None
             }
         })
     {
-        Some(f) => f,
-        None => Err("[HIR] No \"main\" function".to_string())?
+        Some(_) => {},
+        None => Err("[HIR] No entrypoint in the list of declarations".to_string())?
     };
 
     hir.decls.iter().try_for_each(|d| -> Result<(), Error> {
