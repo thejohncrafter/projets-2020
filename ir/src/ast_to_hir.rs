@@ -825,7 +825,18 @@ impl Emitter {
         self.in_entrypoint = true;
 
         // 3. build the body by concatenating the statements of all expression in order.
-        let body: hir::Block = hir::Block::new(self.emit_flattened_statements(&toplevel)?);
+        let mut stmts = vec![];
+        stmts.push(
+            hir::Statement::Call(
+                hir::LValue::Var("nothing".to_string()),
+                hir::Callable::Assign(
+                    hir::Val::Nothing
+                )
+            )
+        );
+
+        stmts.extend(self.emit_flattened_statements(&toplevel)?);
+        let body: hir::Block = hir::Block::new(stmts);
 
         self.in_entrypoint = false;
 
