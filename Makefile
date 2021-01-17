@@ -41,7 +41,8 @@ tarball-pjuliac:
 	cp Cargo.toml /tmp/Lahfa-Marquet/Cargo.toml
 	rm -r /tmp/Lahfa-Marquet/**/target
 	sed -i 's/"sim", //' /tmp/Lahfa-Marquet/Cargo.toml
-	cp rapports/compil/rapport_miprojet.pdf /tmp/Lahfa-Marquet/rapport.pdf
+	cp rapports/compil/rapport_miprojet.pdf /tmp/Lahfa-Marquet/rapport_p1.pdf
+	cp rapports/compil/rapport_complet.pdf /tmp/Lahfa-Marquet/rapport_p2.pdf
 	cd /tmp; zip -r -9 Lahfa-Marquet.zip ./Lahfa-Marquet/**
 	mv /tmp/Lahfa-Marquet.zip .
 
