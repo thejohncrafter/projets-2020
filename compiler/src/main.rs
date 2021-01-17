@@ -103,11 +103,11 @@ fn compile(input: &str,
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .arg("-no-pie")
-            .arg("-lm")
             .arg(user_object_filename)
             .arg(runtime_object_filename)
             .arg("-o")
             .arg(output)
+            .arg("-lm")
             .output()
             .expect("Fatal error: Failed to transform object files into ELF binaries!");
 
