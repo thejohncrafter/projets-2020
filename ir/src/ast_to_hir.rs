@@ -52,7 +52,7 @@ impl Emitter {
 
     fn mk_intermediate_var(&mut self) -> String {
         let mut out = format!("__intermediate_internal{}", self.next_intermediate_variable_id);
-        while self.global_vars.contains(&out) {
+        while self.global_vars.contains(&out) || self.current_params.contains(&out) || self.current_local_vars.contains(&out) {
             self.next_intermediate_variable_id += 1;
             out = format!("__intermediate_internal{}", self.next_intermediate_variable_id);
         }
@@ -382,7 +382,7 @@ impl Emitter {
             ExpVal::Assign(lv, e) => {
                 match lv.in_exp.as_ref() {
                     None => self.emit_global_assign(&lv.name, &e),
-                    Some(p_exp) => self.emit_complex_assign(p_exp, &lv.name, &e)
+                    Some(p_exp) => self.emit_composed_assign(p_exp, &lv.name, &e)
                 }
             },
             ExpVal::Block(block) => {
@@ -421,7 +421,7 @@ impl Emitter {
         Ok(stmts)
     }
 
-    fn emit_complex_assign(&mut self, structure_exp: &Exp, field_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
+    fn emit_composed_assign(&mut self, structure_exp: &Exp, field_name: &String, rhs_expr: &Exp) -> HIRStatementsResult {
         let (mut stmts, struct_val) = self.emit_value(structure_exp)?;
         let (rhs_stmts, rhs_val) = self.emit_value(rhs_expr)?;
         stmts.extend(rhs_stmts);
@@ -534,6 +534,9 @@ impl Emitter {
     fn emit_fn(&mut self, f: &Function, name: String) -> HIRFunctionResult {
         // Reset the counters and local state.
         self.current_local_vars.clear();
+
+        // FIXME: current_local_vars should be initialized to collect_all_assign_in_array(&f.body)
+        // filtered by local scopes.
         self.current_params = f.params.iter().map(|f| f.name.name.clone()).collect();
         self.next_intermediate_variable_id = 0;
 
