@@ -84,6 +84,10 @@ impl StructData {
                 ).into())
         }
     }
+
+    fn get_mem_len(&self) -> usize {
+        16 * self.fields.len()
+    }
 }
 
 struct VarData {
@@ -179,6 +183,8 @@ impl CompiledVal {
 struct LocalRegistry<'a> {
     parent: &'a GlobalRegistry,
     map: HashMap<String, VarData>,
+    additional_vars: Vec<VarData>,
+    next_additional_id: usize,
 }
 
 impl<'a> LocalRegistry<'a> {
@@ -188,11 +194,14 @@ impl<'a> LocalRegistry<'a> {
             map: vars.iter().enumerate()
                 .map(|(i, v)| (v.clone(), VarData::new(i, false)))
                 .collect(),
+            next_additional_id: vars.len(),
+            additional_vars: Vec::new(),
         }
     }
 
     fn compiled_var_names(&self) -> Vec<String> {
         self.map.values()
+            .chain(self.additional_vars.iter())
             .map(|data| vec!(data.ty_name.clone(), data.val_name.clone()))
             .flatten().collect()
     }
@@ -233,19 +242,35 @@ impl<'a> LocalRegistry<'a> {
             None => self.parent.get_var(name),
         }
     }
+
+    fn mk_additional_var(&mut self) -> VarData {
+        let data = VarData::new(self.next_additional_id, false);
+        self.additional_vars.push(VarData::new(self.next_additional_id, false));
+        self.next_additional_id += 1;
+        data
+    }
 }
 
 fn compile_call(
     global: &GlobalRegistry,
-    local: &LocalRegistry,
-    dest: &str,
+    local: &mut LocalRegistry,
+    dest: &hir::LValue,
     call: &hir::Callable
 ) -> Result<Vec<lir::Statement>, Error> {
     let mut out = Vec::new();
+    let mut maybe_store = Vec::new();
+    
+    let dest_var = match dest {
+        hir::LValue::Var(dest) => local.get_var(dest)?,
+        hir::LValue::Access(_, _, _) => {
+            let data = local.mk_additional_var();
+            maybe_store.push(data);
+            maybe_store.last().unwrap()
+        },
+    };
 
     match call {
         hir::Callable::Call(fn_name, native, args) => {
-            let dest_var = local.get_var(dest)?;
             let mut vars = Vec::new();
             
             args.iter().try_for_each(|arg| -> Result<(), Error> {
@@ -284,13 +309,13 @@ fn compile_call(
 
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
-                    local.get_var(dest)?.ty_name.clone(),
+                    dest_var.ty_name.clone(),
                     global.get_ty_id(&dest_ty)?
                 )
             ));
             out.push(lir::Statement::Inst(
                 lir::Instruction::Bin(
-                    local.get_var(dest)?.val_name.clone(),
+                    dest_var.val_name.clone(),
                     lir_op,
                     local.compile_val(a)?.val,
                     local.compile_val(b)?.val,
@@ -305,13 +330,13 @@ fn compile_call(
 
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
-                    local.get_var(dest)?.ty_name.clone(),
+                    dest_var.ty_name.clone(),
                     global.get_ty_id(&dest_ty)?
                 )
             ));
             out.push(lir::Statement::Inst(
                 lir::Instruction::Unary(
-                    local.get_var(dest)?.val_name.clone(),
+                    dest_var.val_name.clone(),
                     lir_op,
                     local.compile_val(a)?.val,
                 )
@@ -320,27 +345,40 @@ fn compile_call(
         hir::Callable::Assign(a) => {
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
-                    local.get_var(dest)?.ty_name.clone(),
+                    dest_var.ty_name.clone(),
                     local.compile_val(a)?.ty,
                 )
             ));
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
-                    local.get_var(dest)?.val_name.clone(),
+                    dest_var.val_name.clone(),
                     local.compile_val(a)?.val,
+                )
+            ));
+        },
+        hir::Callable::Alloc(structure) => {
+            out.push(lir::Statement::Inst(
+                lir::Instruction::Call(
+                    Some((dest_var.ty_name.clone(), dest_var.val_name.clone())),
+                    true,
+                    "native_alloc".to_string(),
+                    vec!(
+                        global.get_ty_id(&ConcreteType::Struct(structure.clone()))?,
+                        lir::Val::Const(global.get_struct(structure)?.get_mem_len() as u64),
+                    )
                 )
             ));
         },
         hir::Callable::IsType(a, t) => {
             out.push(lir::Statement::Inst(
                 lir::Instruction::Mov(
-                    local.get_var(dest)?.ty_name.clone(),
+                    dest_var.ty_name.clone(),
                     global.get_ty_id(&ConcreteType::Bool)?,
                 )
             ));
             out.push(lir::Statement::Inst(
                 lir::Instruction::Bin(
-                    local.get_var(dest)?.val_name.clone(),
+                    dest_var.val_name.clone(),
                     lir::BinOp::Equ,
                     local.compile_val(a)?.ty,
                     global.get_ty_id(&t.into())?,
@@ -349,21 +387,41 @@ fn compile_call(
         },
         hir::Callable::Access(a, structure, field) => {
             let data = global.get_struct(structure)?.get_field(field)?;
+
             out.push(lir::Statement::Inst(
                 lir::Instruction::Access(
-                    local.get_var(dest)?.ty_name.clone(),
-                    local.compile_val(a)?.ty,
+                    dest_var.ty_name.clone(),
+                    local.compile_val(a)?.val,
                     data.ty_addr(),
                 )
             ));
             out.push(lir::Statement::Inst(
                 lir::Instruction::Access(
-                    local.get_var(dest)?.val_name.clone(),
+                    dest_var.val_name.clone(),
                     local.compile_val(a)?.val,
                     data.val_addr(),
                 )
             ));
         },
+    }
+
+    if let hir::LValue::Access(x, structure, field) = dest {
+        let data = global.get_struct(structure)?.get_field(field)?;
+
+        out.push(lir::Statement::Inst(
+            lir::Instruction::AssignArray(
+                local.compile_val(x)?.val,
+                data.ty_addr(),
+                lir::Val::Var(dest_var.ty_name.clone())
+            )
+        ));
+        out.push(lir::Statement::Inst(
+            lir::Instruction::AssignArray(
+                local.compile_val(x)?.val,
+                data.val_addr(),
+                lir::Val::Var(dest_var.val_name.clone())
+            )
+        ));
     }
 
     Ok(out)
@@ -384,7 +442,7 @@ fn compile_return(
 fn compile_if(
     lbl_gen: &mut LabelGenerator,
     global: &GlobalRegistry,
-    local: &LocalRegistry,
+    local: &mut LocalRegistry,
     cond: &hir::Val,
     block_true: &hir::Block,
     block_false: &hir::Block,
@@ -418,7 +476,7 @@ fn compile_if(
 fn compile_while(
     lbl_gen: &mut LabelGenerator,
     global: &GlobalRegistry,
-    local: &LocalRegistry,
+    local: &mut LocalRegistry,
     cond: &hir::Val,
     block: &hir::Block,
 ) -> Result<Vec<lir::Statement>, Error> {
@@ -449,7 +507,7 @@ fn compile_while(
 fn compile_block(
     lbl_gen: &mut LabelGenerator,
     global: &GlobalRegistry,
-    local: &LocalRegistry,
+    local: &mut LocalRegistry,
     block: &hir::Block,
 ) -> Result<Vec<lir::Statement>, Error> {
     let mut out = Vec::new();
@@ -480,10 +538,10 @@ fn compile_fn(
     global: &GlobalRegistry,
     f: &hir::Function
 ) -> Result<lir::Function, Error> {
-    let local = LocalRegistry::new(&global, &f.vars);
+    let mut local = LocalRegistry::new(&global, &f.vars);
     let mut lbl_gen = LabelGenerator::new();
 
-    let body = compile_block(&mut lbl_gen, &global, &local, &f.body)?;
+    let body = compile_block(&mut lbl_gen, &global, &mut local, &f.body)?;
 
     let mut lir_args = Vec::new();
     f.args.iter().try_for_each(|arg| -> Result<(), Error> {

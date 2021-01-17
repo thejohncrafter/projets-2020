@@ -43,14 +43,22 @@ pub enum Callable {
 
     Assign(Val),
 
+    // Allocates memory space for a structure
+    Alloc(String),
     IsType(Val, Type),
+    Access(Val, String, String),
+}
+
+#[derive(Debug, Clone)]
+pub enum LValue {
+    Var(String),
     Access(Val, String, String),
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement {
     // Destination variable and called function
-    Call(String, Callable),
+    Call(LValue, Callable),
     Return(Val),
     
     If(Val, Block, Block),

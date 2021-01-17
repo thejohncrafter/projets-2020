@@ -96,6 +96,9 @@ impl std::fmt::Display for Callable {
             Callable::Assign(v) => {
                 write!(f, "{}", v)?;
             },
+            Callable::Alloc(structure) => {
+                write!(f, "alloc {}", structure)?;
+            },
             Callable::IsType(v, t) => {
                 write!(f, "typeof {} == {}", v, t)?;
             },
@@ -105,6 +108,15 @@ impl std::fmt::Display for Callable {
         }
 
         Ok(())
+    }
+}
+
+impl std::fmt::Display for LValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LValue::Var(name) => write!(f, "{}", name),
+            LValue::Access(x, structure, field) => write!(f, "{}[{}.{}]", x, structure, field)
+        }
     }
 }
 

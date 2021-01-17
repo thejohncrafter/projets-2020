@@ -226,9 +226,15 @@ fn inst_to_asm(
             write_get_val(asm, reg, local, a, "%rax")?;
             writeln!(asm, "\tmovq %rax, {}", local.get_var_access(dest)?)?;
         },
+        Instruction::AssignArray(dest, offset, a) => {
+            write_get_val(asm, reg, local, a, "%rax")?;
+            write_get_val(asm, reg, local, dest, "%rbx")?;
+            writeln!(asm, "\tmov %rax, {}(%rbx)", offset)?;
+        },
         Instruction::Access(dest, a, offset) => {
             write_get_val(asm, reg, local, a, "%rax")?;
-            writeln!(asm, "\tmov %{}, {}(%rax)", dest, offset)?;
+            writeln!(asm, "\tmov {}(%rax), %rbx", offset)?;
+            writeln!(asm, "\tmov %rbx, {}", local.get_var_access(dest)?)?;
         },
         Instruction::Jump(label) => {
             writeln!(asm, "\tjmp fn_{}_lbl_{}", fn_id, label_ids.get(&label.name).unwrap())?;

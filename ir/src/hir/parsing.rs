@@ -164,6 +164,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             IF: (),
             ELSE: (),
             WHILE: (),
+            ALLOC: (),
             TYPEOF: (),
 
             LBRACKET: (),
@@ -242,6 +243,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
                                 "if" => $IF(()),
                                 "else" => $ELSE(()),
                                 "while" => $WHILE(()),
+                                "alloc" => $ALLOC(()),
                                 "typeof" => $TYPEOF(()),
 
                                 "Int64" => $INT64(()),
@@ -393,8 +395,12 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             },
 
             (statement -> dest:ident ARROW c:callable SEMICOLON) => {
-                Ok(Statement::Call($dest, $c))
+                Ok(Statement::Call(LValue::Var($dest), $c))
             },
+            (statement -> dest:val LSQUARE structure:ident DOT field:ident RSQUARE ARROW c:callable SEMICOLON) => {
+                Ok(Statement::Call(LValue::Access($dest, $structure, $field), $c))
+            },
+
             (statement -> RETURN v:val SEMICOLON) => {
                 Ok(Statement::Return($v))
             },
@@ -424,6 +430,10 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
 
             (callable -> a:val) => {
                 Ok(Callable::Assign($a))
+            },
+
+            (callable -> ALLOC structure:ident) => {
+                Ok(Callable::Alloc($structure))
             },
 
             (callable -> TYPEOF v:val EQU t:ty) => {

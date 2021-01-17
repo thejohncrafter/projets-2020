@@ -61,6 +61,9 @@ impl std::fmt::Display for Instruction {
             Instruction::Mov(dest, v) => {
                 writeln!(f, "\t{} <- {};", dest, v)?
             },
+            Instruction::AssignArray(dest, offset, v) => {
+                writeln!(f, "\t{}[{}] <- {};", dest, offset, v)?;
+            },
             Instruction::Access(dest, s, i) => {
                 writeln!(f, "\t{} <- {}[{}];", dest, s, i)?
             },

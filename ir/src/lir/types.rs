@@ -32,7 +32,7 @@ pub enum Instruction {
     Unary(String, UnaryOp, Val),
 
     Mov(String, Val),
-
+    AssignArray(Val, u64, Val),
     Access(String, Val, u64),
 
     Jump(Label),

@@ -369,6 +369,10 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
                 Ok(Statement::Inst(Instruction::Mov($dest, $v)))
             },
 
+            (statement_semi -> dest:val LSQUARE offset:uint RSQUARE ARROW v:val) => {
+                Ok(Statement::Inst(Instruction::AssignArray($dest, $offset, $v)))
+            },
+
             (statement_semi -> dest:ident ARROW p:val LSQUARE i:uint RSQUARE) => {
                 Ok(Statement::Inst(Instruction::Access($dest, $p, $i)))
             },

@@ -84,7 +84,7 @@ impl Emitter {
                     },
                 };
 
-                stmts.push(hir::Statement::Call(out.clone(), callable));
+                stmts.push(hir::Statement::Call(hir::LValue::Var(out.clone()), callable));
 
                 Ok((stmts, hir::Val::Var(out)))
             },
@@ -94,7 +94,7 @@ impl Emitter {
                 let out = self.mk_intermediate_var();
 
                 stmts.push(hir::Statement::Call(
-                        out.clone(),
+                        hir::LValue::Var(out.clone()),
                         hir::Callable::Unary(
                             match op {
                                 UnaryOp::Neg => hir::UnaryOp::Neg,
@@ -118,7 +118,7 @@ impl Emitter {
                                 let (mut stmts, st_val) = self.emit_value(&p_exp)?;
                                 let access_out = self.mk_intermediate_var();
 
-                                stmts.push(hir::Statement::Call(access_out.clone(),
+                                stmts.push(hir::Statement::Call(hir::LValue::Var(access_out.clone()),
                                             hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
 
                                 Ok((stmts, hir::Val::Var(access_out)))
@@ -131,7 +131,7 @@ impl Emitter {
             ExpVal::Mul(cst, var) => {
                 let out = self.mk_intermediate_var();
                 Ok((vec![
-                    hir::Statement::Call(out.clone(),
+                    hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Bin(
                             hir::BinOp::Mul,
                             hir::Val::Const(hir::Type::Int64, *cst as u64),
@@ -144,7 +144,7 @@ impl Emitter {
                 let (mut stmts, b_val) = self.emit_block_value(block)?;
                 let out = self.mk_intermediate_var();
                 stmts.push(
-                    hir::Statement::Call(out.clone(),
+                    hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Bin(hir::BinOp::Mul,
                             hir::Val::Const(hir::Type::Int64, *cst as u64),
                             b_val
@@ -158,7 +158,7 @@ impl Emitter {
                 let out = self.mk_intermediate_var();
                 let (mut stmts, val) = self.emit_value(&exp)?;
                 stmts.push(
-                    hir::Statement::Call(out.clone(),
+                    hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Bin(
                             hir::BinOp::Mul,
                             val,
@@ -185,7 +185,7 @@ impl Emitter {
                 let (mut stmts, vals) = self.emit_values(args)?;
 
                 stmts.push(
-                    hir::Statement::Call(out.clone(),
+                    hir::Statement::Call(hir::LValue::Var(out.clone()),
                     hir::Callable::Call(name.clone(), false, vals))
                 );
 
@@ -203,14 +203,14 @@ impl Emitter {
 
                 then_stmts.push(
                     hir::Statement::Call(
-                        out.clone(),
+                        hir::LValue::Var(out.clone()),
                         hir::Callable::Assign(then_val)
                     )
                 );
 
                 else_stmts.push(
                     hir::Statement::Call(
-                        out.clone(),
+                        hir::LValue::Var(out.clone()),
                         hir::Callable::Assign(else_val)
                     )
                 );
@@ -263,18 +263,18 @@ impl Emitter {
                 let (stmts_end, val_end) = self.emit_value(&range.end)?;
 
                 let mut stmts = stmts_start.into_iter().chain(stmts_end).collect::<Vec<_>>();
-                stmts.push(hir::Statement::Call(c.name.clone(),
+                stmts.push(hir::Statement::Call(hir::LValue::Var(c.name.clone()),
                         hir::Callable::Assign(val_start)));
                 let boolean_val = self.mk_intermediate_var();
 
                 let increment_counter_stmt = hir::Statement::Call(
-                    c.name.clone(),
+                    hir::LValue::Var(c.name.clone()),
                     hir::Callable::Bin(hir::BinOp::Add,
                         hir::Val::Var(c.name.clone()),
                         hir::Val::Const(hir::Type::Int64, 1)));
 
                 let boolean_update_stmt = hir::Statement::Call(
-                    boolean_val.clone(),
+                    hir::LValue::Var(boolean_val.clone()),
                     hir::Callable::Bin(hir::BinOp::Leq,
                         hir::Val::Var(c.name.clone()),
                         val_end
@@ -304,7 +304,7 @@ impl Emitter {
                 let (mut stmts, vals) = self.emit_values(&args)?;
 
                 stmts.push(hir::Statement::Call(
-                    self.mk_intermediate_var(),
+                    hir::LValue::Var(self.mk_intermediate_var()),
                     hir::Callable::Call(f_name.clone(), false, vals),
                 ));
 
@@ -337,7 +337,7 @@ impl Emitter {
         let (mut stmts, val) = self.emit_value(rhs_expr)?;
 
         stmts.push(hir::Statement::Call(
-                var_name.clone(),
+                hir::LValue::Var(var_name.clone()),
                 hir::Callable::Assign(val)
         ));
 
@@ -410,10 +410,10 @@ impl Emitter {
                 let (mut else_stmts, else_val) = self.emit_else_value(else__)?;
 
                 then_stmts.push(hir::Statement::Call(
-                                out.clone(),
+                                hir::LValue::Var(out.clone()),
                                 hir::Callable::Assign(then_val)));
                 else_stmts.push(hir::Statement::Call(
-                        out.clone(),
+                        hir::LValue::Var(out.clone()),
                         hir::Callable::Assign(else_val)));
 
                 stmts.push(

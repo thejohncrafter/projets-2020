@@ -29,6 +29,7 @@ void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t va
 
 void native_print_int(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val) {
     if(ty != TYPE_INT64) {
+        printf("Got ty = %" PRIu64 "; val = %" PRIu64 "\n", ty, val);
         fprintf(stderr, "Expected a Int64 for print_int.\n");
         exit(1);
     }
@@ -61,5 +62,17 @@ void native_pow(int64_t *ret_ty, int64_t *ret_val, int64_t ty_1, int64_t val_1, 
 
     *ret_ty = TYPE_INT64;
     *ret_val = res;
+}
+
+void native_alloc(int64_t *ret_ty, int64_t *ret_val, int64_t type_id, int64_t mem_len) {
+    // We will trust the caller
+    // because every call to this function is done from 
+
+    printf("Alloc -- type ID: %" PRIu64 "; mem length: %" PRIu64 "\n", type_id, mem_len);
+
+    int64_t* pointer = malloc(mem_len);
+
+    *ret_ty = type_id;
+    *ret_val = (int64_t) pointer;
 }
 
