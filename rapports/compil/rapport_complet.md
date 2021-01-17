@@ -194,9 +194,48 @@ Il est possible d'examiner l'HIR avec le flag `-h` sur le compilateur qui écrit
 
 ## HIR vers LIR
 
+Dans le HIR, tous les objets contiennent un identifiant de type et une valeur,
+et les types des structures sont explicites.
+Dans le LIR, tout est sur 64 bits, et il n'y a aucune notion de structure.
+
+Le but de la compilation du HIR vers le LIR est donc de déconstruire ces deux
+abstractions.
+
+Chaque variable du HIR est donc découpée en deux variables du LIR :
+une pour le type et une pour la valeur.
+
+La compilation prend en compte la propagation dynamique des types :
+si on a `x <- a + b`, alors on dit que le type de `x` devient `Int64`.
+
+Les structures sont collectées lors de la compilation.
+On décide un ordonnement des champ des structures (on associe
+une adresse à chaque champ).
+
+Les fonctions du LIR renvoient deux valeurs, qui composent une
+seule valeur au sens du HIR.
+
 ## LIR vers assembleur
 
+Le LIR est conçu pour être quasi-trivialement compilable vers de l'assembleur.
+La seule difficulté est la gestion des appels de fonctions.
+
+Lors de la compilation, on fait attention à respecter l'ABI System V
+(avec un effet de bord utile : on peut directement appeler des fonctions
+écrites en C).
+
+La seule différence avec l'ABI est que les fonction renvoient toutes
+2 valeurs : la première dans `rax`, et la deuxième dans `rdx`.
+
+Les appels aux fonctions « natives » (celles du runtime) sont un peu spéciaux
+car les fonctions de C ne peuvent renvoyer qu'une seule valeur.
+Pour régler ce problème, avant un appel à une fonction native, on alloue
+deux quadwords sur la pile, et les deux premiers arguments de la fonction
+appelée seront les deux pointeurs vers les deux emplacements mémoire que
+l'on vient d'allouer.
+
 ## Assembleur vers binaire ELF avec un runtime C
+
+Il nous suffit de compiler le code généré et le runtime, et de les lier.
 
 ## Futurs travaux
 
@@ -212,11 +251,36 @@ Par manque de temps, cela ne sera pas fait avant le rendu de ce projet.
 
 Nous allons décrire les optimisations que nous avions envisagé avec ces niveaux intermédiaires.
 
+L'optimisation principale à envisager est de limiter la redondance des valeurs
+dans les AST des deux langages intermédiaires (par exemple, on passe beaucoup
+de temps à recopier des noms de variables).
+
+Une première solution est de simplement utiliser des types `Cow` (_Copy On Write_) de Rust.
+
+On aurait aussi pu chercher des optimisations plus intelligentes (en
+cerchant à utiliser des références pour les objets qui sont susceptibles
+d'être souvent réutilisés) mais cela aurait induit beaucoup trop
+de _borrow fighting_ et nous avons préféré nous abstenir.
+
 #### HIR
+
+Le HIR est prévu pour permettre d'introduire du SAA.
 
 #### LIR
 
+Le LIR est prévu pour permettre l'optimisation de l'allocation de
+registres (l'idée du LIR est que la seule différence entre ce
+langage et l'assembleur est que l'on a des pseudo-registres).
+
+En l'état, on introduit beaucoup de movements entre les registres
+qui pourraient être évités avec un algorithme d'allocation un
+tant soit peu efficace.
+
 #### Perfect Optimizer 3000
+
+On pourrait décider d'implémenter un interpéteur et d'essayer
+d'interpréter les programmes au moment de la compilation pour
+produire des binaires qui se contentent d'afficher le résultat...
 
 ### Ce qui n'a pas été fait
 
@@ -233,12 +297,10 @@ ECHEC sur exec/int64.jl (devrait reussir)
 Partie 1: 140/141 : 99%
 ```
 
-Nous sommes confrontés un problème de nature à la fois formelle, légale et ontologique sur les Int64.
-
-Nous ne passons pas le test "exec/int64.jl" : notre compilateur refuses la chaîne `-9223372036854775808`
+Nous ne passons pas le test "exec/int64.jl" : notre compilateur refuse la chaîne `-9223372036854775808`
 car le nombre `9223372036854775808` n'est pas représentable comme un entier signé sur 64 bits.
-Or on pourrait croire que `-9223372036854775808` représente le nombre `-9223372036854775808`, mais
-en réalité non. En effet, après une analyse minutieuse des consignes, nous avons déduit que ceci :
+Normalement la chaîne `-9223372036854775808` représente le nombre `-9223372036854775808`, mais
+pas ici. En fait, si l'on suit exactement la grammaire de Petit Julia donnée dans le sujet :
 
 > Les constantes obéissent aux expressions regulières <entier> et <chaîne> suivantes :
 > [...]
@@ -246,28 +308,26 @@ en réalité non. En effet, après une analyse minutieuse des consignes, nous av
 > [...]
 > Les constantes entières ne doivent pas dépasser 2^63
 
-signifie que `-9223372036854775808` doit être interprété comme `- 9223372036854775808`
-puisque l'expression régulière qui définit les entiers n'accepte pas de signe `-`.
+Cela signifie que `-9223372036854775808` doit être interprété comme `- 9223372036854775808`
+(l'expression régulière qui définit les entiers n'accepte pas de signe `-`).
 
-Il subsiste un débat sur ce que signifie "ne pas dépasser". Doit-on accepter $2^63$ ?
+Pour régler ce problème, on peut essayer de jouer sur l'interprétation de "ne pas dépasser". Doit-on accepter $2^63$ ?
 
-Nous avons déduit que non, et ce pour deux raisons :
+Nous pensons que non, pour deux raisons :
 
 - $2^63$ n'est pas représentable comme entier signé de 64 bits.
     Il aurait fallu soit représenter les `Int64` sur 128 bits, soit les considérer
-	comme non signés. Les deux solutions auraient été absurdes.
+	comme non signés. Aucune de ces solutions ne nous semblait pertinente.
 
-- Le mot « dépasser » est sujet à interprétation. Nous choisissons de définir « dépasser »
-comme « être plus grand que », et « plus grand » est interprété classiquement (en France du
-moins) comme au sens de l'ordre naturel, c'est à dire que « plus grand » est équivalent
-à « supérieur ou égal ».
+- Le mot « dépasser » est même sujet à interprétation. Nous choisissons de définir « dépasser »
+comme « être plus grand que », et « plus grand » est interprété classiquement (puisque
+l'on est en France, qui plus est dans l'école de N.Bourbaki) comme au sens de l'ordre naturel,
+c'est à dire que « plus grand » est équivalent à « supérieur ou égal ».
 
-Nous en avons déduit que _`2^63` dépasse `2^63`_, et donc que l'entier `9223372036854775808`
+Donc _`2^{63}` dépasse `2^{63}`_, et donc que l'entier `9223372036854775808`
 ne doit pas être accepté.
 
-Nous considérons que nous nous conformons bien au sujet, et que le test `exec/int64.jl` est
-en fait erroné.
-
+Finalement, notre analyseur syntaxique est bien conforme au sujet...
 
 #### Analyse sémantique
 
