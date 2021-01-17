@@ -425,6 +425,10 @@ fn fn_to_asm(
             }
         })?;
 
+    // Return Nothing by default
+    writeln!(asm, "\tmovq $0, %rax")?;
+    writeln!(asm, "\tmovq $0, %rdx")?;
+
     // Restore previous frame
     writeln!(asm, "fn_{}_exit:", id)?;
     writeln!(asm, "\taddq ${}, %rsp", frame_size)?;
