@@ -451,6 +451,8 @@ impl Emitter {
                         val_end
                     ));
 
+                stmts.push(boolean_update_stmt.clone());
+
                 self.current_local_vars.insert(c.name.clone());
 
                 let mut body_block = self.emit_block(&body, false)?;
