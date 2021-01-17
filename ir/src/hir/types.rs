@@ -22,7 +22,7 @@ pub enum Val {
 pub enum BinOp {
     And, Or,
     Equ, Neq, Lt, Leq, Gt, Geq,
-    Add, Sub, Mul, Div,
+    Add, Sub, Mul, Mod,
 }
 
 #[derive(Debug, Clone, Copy)]

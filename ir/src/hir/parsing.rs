@@ -35,7 +35,7 @@ enum Punct {
     Add,
     Sub,
     Mul,
-    Div,
+    Mod,
 
     Not,
 }
@@ -128,7 +128,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
         ('+') => {punct!(Add)},
         ('-') => {punct!(Sub)},
         ('*') => {punct!(Mul)},
-        ('%') => {punct!(Div)},
+        ('%') => {punct!(Mod)},
 
         ('!') => {punct!(Not)},
     };
@@ -194,7 +194,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             ADD: (),
             SUB: (),
             MUL: (),
-            DIV: (),
+            MOD: (),
 
             NOT: (),
 
@@ -287,7 +287,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
                                 Add => $ADD(()),
                                 Sub => $SUB(()),
                                 Mul => $MUL(()),
-                                Div => $DIV(()),
+                                Mod => $MOD(()),
 
                                 Not => $NOT(()),
                             }
@@ -459,7 +459,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             (bin_op -> ADD) => {Ok(BinOp::Add)},
             (bin_op -> SUB) => {Ok(BinOp::Sub)},
             (bin_op -> MUL) => {Ok(BinOp::Mul)},
-            (bin_op -> DIV) => {Ok(BinOp::Div)},
+            (bin_op -> MOD) => {Ok(BinOp::Mod)},
 
             (unary_op -> SUB) => {Ok(UnaryOp::Neg)},
             (unary_op -> NOT) => {Ok(UnaryOp::Not)},

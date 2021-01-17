@@ -69,7 +69,7 @@ impl Emitter {
     fn emit_div_function(&mut self) -> HIRFunctionResult {
         let stmts = vec![hir::Statement::Call(
                 hir::LValue::Var("out".to_string()),
-                hir::Callable::Bin(hir::BinOp::Div,
+                hir::Callable::Bin(hir::BinOp::Mod,
                     hir::Val::Var("num".to_string()),
                     hir::Val::Var("denom".to_string())
                 )
@@ -220,7 +220,7 @@ impl Emitter {
                     BinOp::Plus => Native(hir::BinOp::Add),
                     BinOp::Minus => Native(hir::BinOp::Sub),
                     BinOp::Times => Native(hir::BinOp::Mul),
-                    BinOp::Div => Native(hir::BinOp::Div),
+                    BinOp::Mod => Native(hir::BinOp::Mod),
                     BinOp::Pow => Soft("pow".to_string()),
                 };
                 
@@ -432,6 +432,7 @@ impl Emitter {
             ExpVal::For(c, range, body) => {
                 let (stmts_start, val_start) = self.emit_value(&range.start)?;
                 let (stmts_end, val_end) = self.emit_value(&range.end)?;
+                let mut body_block = hir::Block::new(vec!());
 
                 let counter_var = self.mk_intermediate_var();
                 let mut stmts = stmts_start.into_iter().chain(stmts_end).collect::<Vec<_>>();
@@ -456,7 +457,6 @@ impl Emitter {
 
                 self.current_local_vars.insert(c.name.clone());
 
-                let mut body_block = hir::Block::new(vec!());
                 body_block.push(hir::Statement::Call(
                     hir::LValue::Var(c.name.clone()),
                     hir::Callable::Assign(hir::Val::Var(counter_var.clone()))

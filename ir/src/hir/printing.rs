@@ -74,7 +74,7 @@ impl std::fmt::Display for Callable {
                     (Add, "+"),
                     (Sub, "-"),
                     (Mul, "*"),
-                    (Div, "%")
+                    (Mod, "%")
                 );
             },
             Callable::Unary(op, a) => {

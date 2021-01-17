@@ -39,7 +39,7 @@ impl std::fmt::Display for Instruction {
                     (Add, "+"),
                     (Sub, "-"),
                     (Mul, "*"),
-                    (Div, "%")
+                    (Mod, "%")
                 );
             },
             Instruction::Unary(dest, op, a) => {

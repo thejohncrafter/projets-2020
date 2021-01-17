@@ -192,7 +192,7 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
             type_expression(tcx, b)?;
 
             match op {
-                BinOp::Plus | BinOp::Minus | BinOp::Times | BinOp::Div | BinOp::Pow => {
+                BinOp::Plus | BinOp::Minus | BinOp::Times | BinOp::Mod | BinOp::Pow => {
                     if !is_any_or(&a, StaticType::Int64) {
                         return raise_no_such_operation_err(a.span, op, vec![&a.static_ty, &b.static_ty]);
                     }

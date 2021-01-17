@@ -199,9 +199,10 @@ fn inst_to_asm(
                 BinOp::Add => writeln!(asm, "\taddq %rbx, %rax")?,
                 BinOp::Sub => writeln!(asm, "\tsubq %rbx, %rax")?,
                 BinOp::Mul => writeln!(asm, "\timulq %rbx, %rax")?,
-                BinOp::Div => {
+                BinOp::Mod => {
                     writeln!(asm, "\tcqto")?;
                     writeln!(asm, "\tidivq %rbx")?;
+                    writeln!(asm, "\tmovq %rax, %rdx")?;
                 },
             }
 
@@ -216,7 +217,7 @@ fn inst_to_asm(
                 },
                 UnaryOp::Not => {
                     writeln!(asm, "\tnotq %rax")?;
-                    writeln!(asm, "\tandq $0, %rax")?;
+                    writeln!(asm, "\tandq $1, %rax")?;
                 },
             }
 

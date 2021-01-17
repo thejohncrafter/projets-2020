@@ -304,7 +304,7 @@ fn compile_call(
                 hir::BinOp::Add => (ConcreteType::Int64, lir::BinOp::Add),
                 hir::BinOp::Sub => (ConcreteType::Int64, lir::BinOp::Sub),
                 hir::BinOp::Mul => (ConcreteType::Int64, lir::BinOp::Mul),
-                hir::BinOp::Div => (ConcreteType::Int64, lir::BinOp::Div),
+                hir::BinOp::Mod => (ConcreteType::Int64, lir::BinOp::Mod),
             };
 
             out.push(lir::Statement::Inst(

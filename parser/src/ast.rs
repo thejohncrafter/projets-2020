@@ -67,7 +67,7 @@ pub enum BinOp {
     Minus,
 
     Times,
-    Div,
+    Mod,
 
     Pow,
 }
@@ -86,7 +86,7 @@ impl fmt::Display for BinOp {
             BinOp::Plus => write!(f, "+"),
             BinOp::Minus => write!(f, "-"),
             BinOp::Times => write!(f, "×"),
-            BinOp::Div => write!(f, "/"),
+            BinOp::Mod => write!(f, "/"),
             BinOp::Pow => write!(f, "^")
         }
     }

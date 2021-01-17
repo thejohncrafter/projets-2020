@@ -47,7 +47,7 @@ enum Punct {
     Plus,
     Minus,
     Times,
-    Div,
+    Mod,
 
     Not,
 
@@ -230,7 +230,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
         ('+') => {punct!(Plus)},
         ('-') => {punct!(Minus)},
         ('*') => {punct!(Times)},
-        ('%') => {punct!(Div)},
+        ('%') => {punct!(Mod)},
 
         ('!') => {punct!(Not)},
        
@@ -366,7 +366,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             PLUS: (),
             MINUS: (),
             TIMES: (),
-            DIV: (),
+            MOD: (),
 
             NOT: (),
 
@@ -505,7 +505,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
                                 Plus => $PLUS(()),
                                 Minus => $MINUS(()),
                                 Times => $TIMES(()),
-                                Div => $DIV(()),
+                                Mod => $MOD(()),
 
                                 Not => $NOT(()),
 
@@ -597,7 +597,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
             (sum_op -> MINUS) => {Ok(BinOp::Minus)},
 
             (product_op -> TIMES) => {Ok(BinOp::Times)},
-            (product_op -> DIV) => {Ok(BinOp::Div)},
+            (product_op -> MOD) => {Ok(BinOp::Mod)},
 
             (exp -> e:exp_return) => {Ok($e)},
             (clean_exp -> e:exp_clean_return) => {Ok($e)},
