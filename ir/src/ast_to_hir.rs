@@ -127,15 +127,23 @@ impl Emitter {
         Ok(hir::Function::new("print".to_string(), vec!["value".to_string()], local_vars, body))
     }
 
-    fn unpack_println_call(&mut self, tmp: &String, args: &Vec<hir::Val>) -> HIRStatementsResult {
-        // println(…a) := print(a_1); …; print(a_n); print("\n")
+    fn unpack_variadic_call(&mut self, out: &String, fun_name: &String, native: bool, args: &Vec<hir::Val>) -> HIRStatementsResult {
+        // f(…a)= := f(a_1); …; f(a_n)
         let mut stmts = vec![];
 
         for arg in args {
-            stmts.push(hir::Statement::Call(hir::LValue::Var(tmp.clone()),
-                hir::Callable::Call("print".to_string(), false, vec![arg.clone()])
-            ));
+            stmts.push(
+                hir::Statement::Call(hir::LValue::Var(out.clone()),
+                hir::Callable::Call(fun_name.clone(), native, vec![arg.clone()]))
+            );
         }
+
+        Ok(stmts)
+    }
+
+    fn unpack_println_call(&mut self, tmp: &String, args: &Vec<hir::Val>) -> HIRStatementsResult {
+        // println(…a) := print(a_1); …; print(a_n); print("\n")
+        let mut stmts = self.unpack_variadic_call(&tmp, &"print".to_string(), false, args)?;
         stmts.push(
             hir::Statement::Call(hir::LValue::Var(tmp.clone()),
                 hir::Callable::Call("print".to_string(), false, vec![hir::Val::Str("\n".to_string())])
@@ -339,6 +347,8 @@ impl Emitter {
                 } else {
                     if name == "println" {
                         stmts.extend(self.unpack_println_call(&out, &vals)?);
+                    } else if name == "print" {
+                        stmts.extend(self.unpack_variadic_call(&out, &name, false, &vals)?);
                     } else {
                         stmts.push(
                             hir::Statement::Call(hir::LValue::Var(out.clone()),
@@ -469,6 +479,8 @@ impl Emitter {
                 let tmp = self.mk_intermediate_var();
                 if f_name == "println" {
                     stmts.extend(self.unpack_println_call(&tmp, &vals)?);
+                } else if f_name == "print" {
+                    stmts.extend(self.unpack_variadic_call(&tmp, &f_name, false, &vals)?);
                 } else {
                     stmts.push(hir::Statement::Call(
                         hir::LValue::Var(tmp),
