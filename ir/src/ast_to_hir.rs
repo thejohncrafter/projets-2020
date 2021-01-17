@@ -232,6 +232,27 @@ impl Emitter {
         }
     }
 
+
+    fn emit_lvalue_value(&mut self, lv: &LValue) -> HIRValueResult {
+        match lv.in_exp.as_ref() {
+            None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
+            Some(p_exp) => {
+                match &p_exp.static_ty {
+                    StaticType::Struct(s) => {
+                        let (mut stmts, st_val) = self.emit_value(&p_exp)?;
+                        let access_out = self.mk_intermediate_var();
+
+                        stmts.push(hir::Statement::Call(hir::LValue::Var(access_out.clone()),
+                                    hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
+
+                        Ok((stmts, hir::Val::Var(access_out)))
+                    },
+                    _ => Err(format!("[T-AST] Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
+                }
+            }
+        }
+    }
+
     fn emit_value(&mut self, e: &Exp) -> HIRValueResult {
         match e.val.as_ref() {
             ExpVal::BinOp(op, a, b) => {
@@ -434,8 +455,17 @@ impl Emitter {
 
                 Ok((stmts, self.renamer.get_val(out)))
             },
+            // Support x = y = z = … = e
+            ExpVal::Assign(lv, _) => {
+                let mut stmts = self.emit_statements(e)?;
+                let (stmts_lv, val_lv) = self.emit_lvalue_value(&lv)?;
+                stmts.extend(stmts_lv);
+
+                // now we want to say that we created value ((stmts, lv))
+                Ok((stmts, val_lv))
+            },
             // They produce nothing.
-            ExpVal::Assign(_, _) | ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
+            ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
                 let stmts = self.emit_statements(e)?;
 
                 Ok((stmts, hir::Val::Nothing))
