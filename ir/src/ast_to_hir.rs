@@ -20,6 +20,42 @@ pub type HIRStructDeclResult = Result<hir::StructDecl, Error>;
 pub type HIRDeclsResult = Result<Vec<hir::Decl>, Error>;
 pub type HIRSourceResult = Result<hir::Source, Error>;
 
+struct Renamer {
+    stack: Vec<(String, String)>,
+}
+
+impl Renamer {
+    fn new() -> Self {
+        Renamer {stack: Vec::new()}
+    }
+
+    fn get_val(&self, name: String) -> hir::Val {
+        hir::Val::Var(match self.stack.iter().rev().find(|(u, _)| *u == name) {
+            Some((_, v)) => v.clone(),
+            None => name.clone()
+        })
+    }
+
+    fn get_lvalue(&self, name: String) -> hir::LValue {
+        hir::LValue::Var(match self.stack.iter().rev().find(|(u, _)| *u == name) {
+            Some((_, v)) => v.clone(),
+            None => name.clone()
+        })
+    }
+
+    fn push(&mut self, name: String, renamed: String) {
+        self.stack.push((name, renamed))
+    }
+
+    fn pop(&mut self) {
+        self.stack.pop();
+    }
+
+    fn reset(&mut self) {
+        self.stack = Vec::new();
+    }
+}
+
 fn from_static_type(s: StaticType) -> Option<hir::Type> {
     match s {
         StaticType::Any => None,
@@ -39,6 +75,7 @@ fn is_native_function(n: &str) -> bool {
 }
 
 struct Emitter {
+    pub renamer: Renamer,
     pub next_intermediate_variable_id: u64,
     pub current_local_vars: HashSet<String>,
     pub current_params: HashSet<String>,
@@ -49,7 +86,9 @@ struct Emitter {
 
 impl Emitter {
     fn init(st_names: HashSet<String>) -> Self {
-        Emitter { next_intermediate_variable_id: 0,
+        Emitter {
+            renamer: Renamer::new(),
+            next_intermediate_variable_id: 0,
             current_local_vars: HashSet::new(),
             global_vars: HashSet::new(),
             current_params: HashSet::new(),
@@ -59,7 +98,7 @@ impl Emitter {
     }
 
     fn emit_panic_call(&mut self, out: &String, message: &str) -> HIRStatementsResult {
-        Ok(vec![hir::Statement::Call(hir::LValue::Var(out.clone()),
+        Ok(vec![hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
             hir::Callable::Call("panic".to_string(), true, vec![
                 hir::Val::Str(message.to_string())
             ])
@@ -68,13 +107,13 @@ impl Emitter {
 
     fn emit_div_function(&mut self) -> HIRFunctionResult {
         let stmts = vec![hir::Statement::Call(
-                hir::LValue::Var("out".to_string()),
+                self.renamer.get_lvalue("out".to_string()),
                 hir::Callable::Bin(hir::BinOp::Mod,
-                    hir::Val::Var("num".to_string()),
-                    hir::Val::Var("denom".to_string())
+                    self.renamer.get_val("num".to_string()),
+                    self.renamer.get_val("denom".to_string())
                 )
             ),
-            hir::Statement::Return(hir::Val::Var("out".to_string()))
+            hir::Statement::Return(self.renamer.get_val("out".to_string()))
         ];
 
         Ok(hir::Function::new(
@@ -95,12 +134,12 @@ impl Emitter {
 
         local_vars.extend(cond_vars.clone());
 
-        let param = hir::Val::Var("value".to_string());
+        let param = self.renamer.get_val("value".to_string());
 
         for ((htype, _), cond_var) in variants.iter().zip(cond_vars.iter()) {
             body.push(
                 hir::Statement::Call(
-                    hir::LValue::Var(cond_var.clone()),
+                    self.renamer.get_lvalue(cond_var.clone()),
                     hir::Callable::IsType(param.clone(), htype.clone())
                 ));
         }
@@ -110,12 +149,12 @@ impl Emitter {
             hir::Block::new(self.emit_panic_call(&tmp, "Value passed to print is not printable!")?), |prev_block, ((_, native_suffix), cond_var)| {
                 hir::Block::new(
                     vec![
-                        hir::Statement::If(hir::Val::Var(cond_var),
+                        hir::Statement::If(self.renamer.get_val(cond_var),
                             hir::Block::new(vec![hir::Statement::Call(
-                                hir::LValue::Var(tmp.clone()),
+                                self.renamer.get_lvalue(tmp.clone()),
                                 hir::Callable::Call(format!("print_{}", native_suffix),
                                     true,
-                                    vec![hir::Val::Var("value".to_string())]
+                                    vec![self.renamer.get_val("value".to_string())]
                                 )
                             )]),
                             prev_block
@@ -133,7 +172,7 @@ impl Emitter {
 
         for arg in args {
             stmts.push(
-                hir::Statement::Call(hir::LValue::Var(out.clone()),
+                hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                 hir::Callable::Call(fun_name.clone(), native, vec![arg.clone()]))
             );
         }
@@ -145,7 +184,7 @@ impl Emitter {
         // println(…a) := print(a_1); …; print(a_n); print("\n")
         let mut stmts = self.unpack_variadic_call(&tmp, &"print".to_string(), false, args)?;
         stmts.push(
-            hir::Statement::Call(hir::LValue::Var(tmp.clone()),
+            hir::Statement::Call(self.renamer.get_lvalue(tmp.clone()),
                 hir::Callable::Call("print".to_string(), false, vec![hir::Val::Str("\n".to_string())])
             )
         );
@@ -233,9 +272,9 @@ impl Emitter {
                     },
                 };
 
-                stmts.push(hir::Statement::Call(hir::LValue::Var(out.clone()), callable));
+                stmts.push(hir::Statement::Call(self.renamer.get_lvalue(out.clone()), callable));
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             ExpVal::Block(block) => self.emit_block_value(block),
             ExpVal::UnaryOp(op, e) => {
@@ -243,7 +282,7 @@ impl Emitter {
                 let out = self.mk_intermediate_var();
 
                 stmts.push(hir::Statement::Call(
-                        hir::LValue::Var(out.clone()),
+                        self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Unary(
                             match op {
                                 UnaryOp::Neg => hir::UnaryOp::Neg,
@@ -253,24 +292,24 @@ impl Emitter {
                         )
                     ));
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst))),
             ExpVal::Bool(cst) => Ok((vec![], hir::Val::Const(hir::Type::Bool, if *cst {1} else {0}))),
             ExpVal::Str(cst) => Ok((vec![], hir::Val::Str(cst.clone()))),
             ExpVal::LValue(lv) => {
                 match lv.in_exp.as_ref() {
-                    None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
+                    None => Ok((vec![], self.renamer.get_val(lv.name.clone()))),
                     Some(p_exp) => {
                         match &p_exp.static_ty {
                             StaticType::Struct(s) => {
                                 let (mut stmts, st_val) = self.emit_value(&p_exp)?;
                                 let access_out = self.mk_intermediate_var();
 
-                                stmts.push(hir::Statement::Call(hir::LValue::Var(access_out.clone()),
+                                stmts.push(hir::Statement::Call(self.renamer.get_lvalue(access_out.clone()),
                                             hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
 
-                                Ok((stmts, hir::Val::Var(access_out)))
+                                Ok((stmts, self.renamer.get_val(access_out)))
                             },
                             _ => Err(format!("[T-AST] Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
                         }
@@ -280,20 +319,20 @@ impl Emitter {
             ExpVal::Mul(cst, var) => {
                 let out = self.mk_intermediate_var();
                 Ok((vec![
-                    hir::Statement::Call(hir::LValue::Var(out.clone()),
+                    hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Bin(
                             hir::BinOp::Mul,
                             hir::Val::Const(hir::Type::Int64, *cst),
-                            hir::Val::Var(var.clone())
+                            self.renamer.get_val(var.clone())
                         )
                     )
-                ], hir::Val::Var(out)))
+                ], self.renamer.get_val(out)))
             },
             ExpVal::LMul(cst, block) => {
                 let (mut stmts, b_val) = self.emit_block_value(block)?;
                 let out = self.mk_intermediate_var();
                 stmts.push(
-                    hir::Statement::Call(hir::LValue::Var(out.clone()),
+                    hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Bin(hir::BinOp::Mul,
                             hir::Val::Const(hir::Type::Int64, *cst),
                             b_val
@@ -301,22 +340,22 @@ impl Emitter {
                     )
                 );
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             ExpVal::RMul(exp, var) => {
                 let out = self.mk_intermediate_var();
                 let (mut stmts, val) = self.emit_value(&exp)?;
                 stmts.push(
-                    hir::Statement::Call(hir::LValue::Var(out.clone()),
+                    hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Bin(
                             hir::BinOp::Mul,
                             val,
-                            hir::Val::Var(var.clone())
+                            self.renamer.get_val(var.clone())
                         )
                     )
                 );
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             ExpVal::Return(internal_exp) => {
                 // Evaluate internal_exp as a statement.
@@ -340,7 +379,7 @@ impl Emitter {
                 if self.structure_names.contains(name) {
                     stmts.push(
                         hir::Statement::Call(
-                            hir::LValue::Var(out.clone()),
+                            self.renamer.get_lvalue(out.clone()),
                             hir::Callable::Alloc(name.clone())
                         )
                     );
@@ -351,13 +390,13 @@ impl Emitter {
                         stmts.extend(self.unpack_variadic_call(&out, &name, false, &vals)?);
                     } else {
                         stmts.push(
-                            hir::Statement::Call(hir::LValue::Var(out.clone()),
+                            hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                             hir::Callable::Call(name.clone(), is_native_function(&name), vals))
                         );
                     }
                 }
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             ExpVal::If(cond, then, else_) => {
                 // The value emitted by a if, is the value emitted by the then block or the else
@@ -371,14 +410,14 @@ impl Emitter {
 
                 then_stmts.push(
                     hir::Statement::Call(
-                        hir::LValue::Var(out.clone()),
+                        self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Assign(then_val)
                     )
                 );
 
                 else_stmts.push(
                     hir::Statement::Call(
-                        hir::LValue::Var(out.clone()),
+                        self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Assign(else_val)
                     )
                 );
@@ -393,7 +432,7 @@ impl Emitter {
                      )
                 );
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             },
             // They produce nothing.
             ExpVal::Assign(_, _) | ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
@@ -435,21 +474,22 @@ impl Emitter {
                 let mut body_block = hir::Block::new(vec!());
 
                 let counter_var = self.mk_intermediate_var();
+
                 let mut stmts = stmts_start.into_iter().chain(stmts_end).collect::<Vec<_>>();
-                stmts.push(hir::Statement::Call(hir::LValue::Var(counter_var.clone()),
+                stmts.push(hir::Statement::Call(self.renamer.get_lvalue(counter_var.clone()),
                         hir::Callable::Assign(val_start)));
                 let boolean_val = self.mk_intermediate_var();
 
                 let increment_counter_stmt = hir::Statement::Call(
-                    hir::LValue::Var(counter_var.clone()),
+                    self.renamer.get_lvalue(counter_var.clone()),
                     hir::Callable::Bin(hir::BinOp::Add,
-                        hir::Val::Var(counter_var.clone()),
+                        self.renamer.get_val(counter_var.clone()),
                         hir::Val::Const(hir::Type::Int64, 1)));
 
                 let boolean_update_stmt = hir::Statement::Call(
-                    hir::LValue::Var(boolean_val.clone()),
+                    self.renamer.get_lvalue(boolean_val.clone()),
                     hir::Callable::Bin(hir::BinOp::Leq,
-                        hir::Val::Var(counter_var.clone()),
+                        self.renamer.get_val(counter_var.clone()),
                         val_end
                     ));
 
@@ -457,16 +497,14 @@ impl Emitter {
 
                 self.current_local_vars.insert(c.name.clone());
 
-                body_block.push(hir::Statement::Call(
-                    hir::LValue::Var(c.name.clone()),
-                    hir::Callable::Assign(hir::Val::Var(counter_var.clone()))
-                ));
+                self.renamer.push(c.name.clone(), counter_var);
                 body_block = body_block.merge(self.emit_block(&body, false)?);
+                self.renamer.pop();
 
                 body_block.push(increment_counter_stmt);
                 body_block.push(boolean_update_stmt);
 
-                stmts.push(hir::Statement::While(hir::Val::Var(boolean_val), body_block));
+                stmts.push(hir::Statement::While(self.renamer.get_val(boolean_val), body_block));
 
                 Ok(stmts)
             },
@@ -491,7 +529,7 @@ impl Emitter {
                     stmts.extend(self.unpack_variadic_call(&tmp, &f_name, false, &vals)?);
                 } else {
                     stmts.push(hir::Statement::Call(
-                        hir::LValue::Var(tmp),
+                        self.renamer.get_lvalue(tmp),
                         hir::Callable::Call(f_name.clone(), is_native_function(&f_name), vals),
                     ));
                 }
@@ -534,7 +572,7 @@ impl Emitter {
         let (mut stmts, val) = self.emit_value(rhs_expr)?;
 
         stmts.push(hir::Statement::Call(
-                hir::LValue::Var(var_name.clone()),
+                self.renamer.get_lvalue(var_name.clone()),
                 hir::Callable::Assign(val)
         ));
 
@@ -633,10 +671,10 @@ impl Emitter {
                 let (mut else_stmts, else_val) = self.emit_else_value(else__)?;
 
                 then_stmts.push(hir::Statement::Call(
-                                hir::LValue::Var(out.clone()),
+                                self.renamer.get_lvalue(out.clone()),
                                 hir::Callable::Assign(then_val)));
                 else_stmts.push(hir::Statement::Call(
-                        hir::LValue::Var(out.clone()),
+                        self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Assign(else_val)));
 
                 stmts.push(
@@ -646,7 +684,7 @@ impl Emitter {
                     )
                 );
 
-                Ok((stmts, hir::Val::Var(out)))
+                Ok((stmts, self.renamer.get_val(out)))
             }
         }
     }
@@ -679,9 +717,9 @@ impl Emitter {
                 let out = self.mk_intermediate_var();
                 conds_val.push(out.clone());
                 stmts.push(
-                    hir::Statement::Call(hir::LValue::Var(out),
+                    hir::Statement::Call(self.renamer.get_lvalue(out),
                         hir::Callable::IsType(
-                            hir::Val::Var(arg_name.clone()),
+                            self.renamer.get_val(arg_name.clone()),
                             r_type
                         )
                     )
@@ -693,7 +731,7 @@ impl Emitter {
         let cond_out = self.mk_intermediate_var();
         // $cond_out <- true
         stmts.push(
-            hir::Statement::Call(hir::LValue::Var(cond_out.clone()),
+            hir::Statement::Call(self.renamer.get_lvalue(cond_out.clone()),
                 hir::Callable::Assign(
                     hir::Val::Const(
                         hir::Type::Bool,
@@ -707,17 +745,17 @@ impl Emitter {
         conds_val.iter().for_each(|val| {
             stmts.push(
                 hir::Statement::Call(
-                    hir::LValue::Var(cond_out.clone()),
+                    self.renamer.get_lvalue(cond_out.clone()),
                     hir::Callable::Bin(
                         hir::BinOp::And,
-                        hir::Val::Var(cond_out.clone()),
-                        hir::Val::Var(val.clone())
+                        self.renamer.get_val(cond_out.clone()),
+                        self.renamer.get_val(val.clone())
                     )
                 )
             );
         });
 
-        Ok((stmts, hir::Val::Var(cond_out)))
+        Ok((stmts, self.renamer.get_val(cond_out)))
     }
 
     fn emit_dynamic_dispatch(&mut self, name: &String, f_s: &Vec<Function>) -> HIRDeclsResult {
@@ -726,7 +764,7 @@ impl Emitter {
             let mut fun_decls = vec![];
             let mut weights = vec![0; f_s.len()]; // Selectivity weights.
             let mut stmts = vec![];
-            let args: Vec<hir::Val> = f_s.first().unwrap().params.iter().map(|arg| hir::Val::Var(arg.name.name.clone())).collect();
+            let args: Vec<hir::Val> = f_s.first().unwrap().params.iter().map(|arg| self.renamer.get_val(arg.name.name.clone())).collect();
             let str_sig: Vec<String> = f_s.first().unwrap().params.iter().map(|arg| arg.name.name.clone()).collect();
             let out = self.mk_intermediate_var();
 
@@ -769,7 +807,7 @@ impl Emitter {
                     hir::Block::new(self.emit_panic_call(&out, &format!("Dynamic dispatch failure for function call '{}'", name))?)
             , |prev_block, (weight, cond_val, name)| {
                 let call_block = hir::Block::new(vec![
-                    hir::Statement::Call(hir::LValue::Var(out.clone()),
+                    hir::Statement::Call(self.renamer.get_lvalue(out.clone()),
                         hir::Callable::Call(name, false,
                             args.clone())
                         )
@@ -782,7 +820,7 @@ impl Emitter {
             }));
 
             body.push(hir::Statement::Return(
-                    hir::Val::Var(out)
+                    self.renamer.get_val(out)
             ));
 
             Ok(fun_decls
@@ -828,7 +866,7 @@ impl Emitter {
         let mut stmts = vec![];
         stmts.push(
             hir::Statement::Call(
-                hir::LValue::Var("nothing".to_string()),
+                self.renamer.get_lvalue("nothing".to_string()),
                 hir::Callable::Assign(
                     hir::Val::Nothing
                 )
