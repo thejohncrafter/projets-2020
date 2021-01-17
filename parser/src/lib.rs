@@ -3,8 +3,8 @@ pub mod typing;
 
 mod parse;
 
-use parse::parse;
-use typing::main::static_type;
+pub use parse::parse;
+pub use typing::main::static_type;
 use typing::data::TypedDecls;
 use ast::Decl;
 

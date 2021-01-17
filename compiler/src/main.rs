@@ -12,6 +12,7 @@ use ir::ast_to_hir::typed_ast_to_hir;
 use ir::hir_to_lir::hir_to_lir;
 use ir::lir_to_asm::lir_to_asm;
 use parser::parse_and_type_file;
+use parser::{parse, static_type};
 
 fn read_file(name: &str) -> Result<String, String> {
     let path = Path::new(name);
@@ -47,13 +48,31 @@ fn write_file(name: &str, contents: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn compile_to_asm(file_name: &str, output: &str, debug_hir: bool, debug_lir: bool) -> Result<String, String> {
+fn compile_to_asm(
+    file_name: &str,
+    output: &str,
+    debug_hir: bool,
+    debug_lir: bool,
+    parse_only: bool,
+    type_only: bool,
+) -> Result<Option<String>, String> {
     let s = read_file(file_name)?;
 
-    let res = match parse_and_type_file(file_name, &s) {
+    // static_type(parse(file_name, &contents).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    
+    let parse_res = match parse(file_name, &s) {
         Ok(res) => res,
         Err(e) => return Err(e.to_string())
     };
+
+    if parse_only {return Ok(None)}
+
+    let res = match static_type(parse_res) {
+        Ok(res) => res,
+        Err(e) => return Err(e.to_string())
+    };
+
+    if type_only {return Ok(None)}
 
     let hir_repr = typed_ast_to_hir(res).map_err(|e| format!("{}", e))?;
     if debug_hir {
@@ -65,19 +84,22 @@ fn compile_to_asm(file_name: &str, output: &str, debug_hir: bool, debug_lir: boo
     }
     let asm_repr = lir_to_asm(&lir_repr).map_err(|e| format!("{}", e))?;
     
-    Ok(asm_repr)
+    Ok(Some(asm_repr))
 }
 
 fn compile(input: &str,
     output: &str,
-    _parse_only: bool,
-    _type_only: bool,
+    parse_only: bool,
+    type_only: bool,
     asm_only: bool, 
     debug_hir: bool, debug_lir: bool,
-    runtime_object_filename: &str) -> Result<(), String> {
-    let asm = compile_to_asm(input, output, debug_hir, debug_lir)?;
+    runtime_object_filename: &str) -> Result<(), String> { 
+    let asm = match compile_to_asm(input, output, debug_hir, debug_lir, parse_only, type_only)? {
+        Some(asm) => asm,
+        None => return Ok(())
+    };
     let asm_filename = format!("{}.s", output);
-    write_file(&asm_filename, &asm)?;
+    write_file(&asm_filename, &asm)?; 
 
     if !asm_only {
         // run `as` on asm file to provide object file.
