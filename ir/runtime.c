@@ -18,7 +18,7 @@ void native_print_nothing(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t
         exit(1);
     }
 
-    printf("nothing\n");
+    printf("nothing");
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
@@ -31,9 +31,9 @@ void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t va
     }
 
     if(val)
-        printf("true\n");
+        printf("true");
     else
-        printf("false\n");
+        printf("false");
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
@@ -46,7 +46,7 @@ void native_print_int(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val
         exit(1);
     }
 
-    printf("%" PRIu64 "\n", val);
+    printf("%" PRIu64, val);
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;

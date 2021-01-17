@@ -86,7 +86,7 @@ impl Emitter {
 
     fn emit_print_function(&mut self) -> HIRFunctionResult {
         let variants = vec![(hir::Type::Nothing, "nothing"), (hir::Type::Str, "string"), (hir::Type::Bool, "bool"), (hir::Type::Int64, "int")];
-        let cond_vars = vec![self.mk_intermediate_var(); variants.len()];
+        let cond_vars: Vec<String> = (0..variants.len()).map(|_| self.mk_intermediate_var()).collect();
         let tmp = self.mk_intermediate_var();
 
         let mut body = hir::Block::new(vec![]);
@@ -126,22 +126,26 @@ impl Emitter {
         Ok(hir::Function::new("print".to_string(), vec!["value".to_string()], local_vars, body))
     }
 
-    fn emit_println_function(&mut self) -> HIRFunctionResult {
-        // println := print(x); print("\n")
-        let tmp = self.mk_intermediate_var();
-        let calls_block = hir::Block::new(vec![
-            hir::Statement::Call(hir::LValue::Var(tmp.clone()),
-                hir::Callable::Call("print".to_string(), false, vec![hir::Val::Var("value".to_string())])
-            ),
+    fn unpack_println_call(&mut self, tmp: &String, args: &Vec<hir::Val>) -> HIRStatementsResult {
+        // println(…a) := print(a_1); …; print(a_n); print("\n")
+        let mut stmts = vec![];
+
+        for arg in args {
+            stmts.push(hir::Statement::Call(hir::LValue::Var(tmp.clone()),
+                hir::Callable::Call("print".to_string(), false, vec![arg.clone()])
+            ));
+        }
+        stmts.push(
             hir::Statement::Call(hir::LValue::Var(tmp.clone()),
                 hir::Callable::Call("print".to_string(), false, vec![hir::Val::Str("\n".to_string())])
             )
-        ]);
-        Ok(hir::Function::new("println".to_string(), vec!["value".to_string()], vec![tmp], calls_block))
+        );
+
+        Ok(stmts)
     }
 
     fn emit_core_declarations(&mut self) -> HIRDeclsResult {
-        Ok(vec![self.emit_print_function()?, self.emit_println_function()?, self.emit_div_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
+        Ok(vec![self.emit_print_function()?, self.emit_div_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
     }
 
     fn mk_intermediate_var(&mut self) -> String {
@@ -343,10 +347,14 @@ impl Emitter {
                         )
                     );
                 } else {
-                    stmts.push(
-                        hir::Statement::Call(hir::LValue::Var(out.clone()),
-                        hir::Callable::Call(name.clone(), is_native_function(&name), vals))
-                    );
+                    if name == "println" {
+                        stmts.extend(self.unpack_println_call(&out, &vals)?);
+                    } else {
+                        stmts.push(
+                            hir::Statement::Call(hir::LValue::Var(out.clone()),
+                            hir::Callable::Call(name.clone(), is_native_function(&name), vals))
+                        );
+                    }
                 }
 
                 Ok((stmts, hir::Val::Var(out)))
@@ -468,10 +476,15 @@ impl Emitter {
             ExpVal::Call(f_name, args) => {
                 let (mut stmts, vals) = self.emit_values(&args)?;
 
-                stmts.push(hir::Statement::Call(
-                    hir::LValue::Var(self.mk_intermediate_var()),
-                    hir::Callable::Call(f_name.clone(), is_native_function(&f_name), vals),
-                ));
+                let tmp = self.mk_intermediate_var();
+                if f_name == "println" {
+                    stmts.extend(self.unpack_println_call(&tmp, &vals)?);
+                } else {
+                    stmts.push(hir::Statement::Call(
+                        hir::LValue::Var(tmp),
+                        hir::Callable::Call(f_name.clone(), is_native_function(&f_name), vals),
+                    ));
+                }
 
                 Ok(stmts)
             },
