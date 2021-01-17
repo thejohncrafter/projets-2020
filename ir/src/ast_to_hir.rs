@@ -462,7 +462,7 @@ impl Emitter {
                 let out = self.mk_intermediate_var();
                 conds_val.push(out.clone());
                 stmts.push(
-                    hir::Statement::Call(out,
+                    hir::Statement::Call(hir::LValue::Var(out),
                         hir::Callable::IsType(
                             hir::Val::Var(arg_name.clone()),
                             r_type
@@ -476,7 +476,7 @@ impl Emitter {
         let cond_out = self.mk_intermediate_var();
         // $cond_out <- true
         stmts.push(
-            hir::Statement::Call(cond_out.clone(),
+            hir::Statement::Call(hir::LValue::Var(cond_out.clone()),
                 hir::Callable::Assign(
                     hir::Val::Const(
                         hir::Type::Bool,
@@ -490,7 +490,7 @@ impl Emitter {
         conds_val.iter().for_each(|val| {
             stmts.push(
                 hir::Statement::Call(
-                    cond_out.clone(),
+                    hir::LValue::Var(cond_out.clone()),
                     hir::Callable::Bin(
                         hir::BinOp::And,
                         hir::Val::Var(cond_out.clone()),
@@ -550,14 +550,14 @@ impl Emitter {
             // fold over all blocks to build the if cascade in selectivity order.
             // FIXME(Ryan): the initial value for the fold should be the failure block:
             let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(hir::Block::new(vec![
-                        hir::Statement::Call(out.clone(),
+                        hir::Statement::Call(hir::LValue::Var(out.clone()),
                             hir::Callable::Call("panic".to_string(), true, vec![
                                 hir::Val::Str(format!("Dynamic dispatch failure for function call '{}'", name))
                             ])
                         )
             ]), |prev_block, (weight, cond_val, name)| {
                 let call_block = hir::Block::new(vec![
-                    hir::Statement::Call(out.clone(),
+                    hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Call(name, false,
                             args.clone())
                         )

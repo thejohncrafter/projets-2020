@@ -68,11 +68,20 @@ void native_alloc(int64_t *ret_ty, int64_t *ret_val, int64_t type_id, int64_t me
     // We will trust the caller
     // because every call to this function is done from 
 
-    printf("Alloc -- type ID: %" PRIu64 "; mem length: %" PRIu64 "\n", type_id, mem_len);
-
     int64_t* pointer = malloc(mem_len);
 
     *ret_ty = type_id;
     *ret_val = (int64_t) pointer;
+}
+
+void native_panic(int64_t *ret_ty, int64_t *ret_val, int64_t ty, char* val) {
+    if(ty != TYPE_STR) {
+        fprintf(stderr, "Expected a Str for panic.\n");
+        exit(1);
+    }
+
+    printf("%s\n", val);
+
+    exit(1);
 }
 
