@@ -424,6 +424,8 @@ impl Emitter {
                         val_end
                     ));
 
+                self.current_local_vars.insert(c.name.clone());
+
                 let mut body_block = self.emit_block(&body, false)?;
 
                 body_block.push(increment_counter_stmt);
