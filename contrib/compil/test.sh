@@ -156,16 +156,21 @@ for f in exec/*.jl; do
     rm -f $binary
     expected=exec/`basename $f .jl`.out
     max=`expr $max + 1`;
-    if compile $f "-o $binary"; then
+    if compile $f -o $binary; then
 	rm -f out
 	score_comp=`expr $score_comp + 1`;
-        if $(binary) > out; then
+        status=`eval "./$binary > out"`;
+        if $status; then
 	    score_out=`expr $score_out + 1`;
 	    if cmp --quiet out $expected; then
 		score_test=`expr $score_test + 1`;
 	    else
 		echo
 		echo "ECHEC : mauvaise sortie pour $f"
+                echo "ATTENDU :"
+                cat $expected
+                echo "OBTENU :"
+                cat out
 	    fi
 	else
 		echo
@@ -186,9 +191,10 @@ for f in exec-fail/*.jl; do
     binary="./exec/`basename $f .jl`"
     rm -f $binary
     max=`expr $max + 1`;
-    if compile $f "-o $binary"; then
+    if compile $f -o $binary; then
 	score_comp=`expr $score_comp + 1`;
-        if $(binary) > out; then
+        status=`eval "./$binary > out"`;
+        if $status; then
 	    echo
 	    echo "ECHEC : devrait échouer sur $f"
 	else

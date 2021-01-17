@@ -12,6 +12,18 @@
 
 // Assuming a 64-bits machine, we get 64 bits long pointers.
 
+void native_print_nothing(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t _) {
+    if (ty != TYPE_NOTHING) {
+        fprintf(stderr, "Expected a Nothing for print_nothing.\n");
+        exit(1);
+    }
+
+    printf("nothing");
+
+    *ret_ty = TYPE_NOTHING;
+    *ret_val = 0;
+}
+
 void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val) {
     if(ty != TYPE_BOOL) {
         fprintf(stderr, "Expected a Bool for print_bool.\n");
@@ -19,9 +31,9 @@ void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t va
     }
 
     if(val)
-        printf("true\n");
+        printf("true");
     else
-        printf("false\n");
+        printf("false");
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
@@ -34,7 +46,7 @@ void native_print_int(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val
         exit(1);
     }
 
-    printf("%" PRIu64 "\n", val);
+    printf("%" PRIu64, val);
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
@@ -46,7 +58,7 @@ void native_print_string(int64_t *ret_ty, int64_t *ret_val, int64_t ty, char* va
         exit(1);
     }
 
-    printf("%s\n", val);
+    printf("%s", val);
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
