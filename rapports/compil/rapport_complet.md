@@ -351,7 +351,7 @@ Partie 2: 88/89 : 98%
 Partie 3:
 Compilation : 52/53 : 98%
 Code produit : 38/53 : 71%
-Comportement du code : 35/53 : 66%
+Comportement du code : 37/53 : 69%
 ```
 
 Concrètement, les majeurs problèmes de la compilation sont:
