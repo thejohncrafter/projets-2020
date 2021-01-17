@@ -30,6 +30,13 @@ fn from_static_type(s: StaticType) -> Option<hir::Type> {
     }
 }
 
+fn is_native_function(n: &str) -> bool {
+    match n {
+        "pow" => true,
+        _ => false
+    }
+}
+
 struct Emitter {
     pub next_intermediate_variable_id: u64,
     pub current_local_vars: HashSet<String>,
@@ -48,6 +55,74 @@ impl Emitter {
             current_params: HashSet::new(),
             structure_names: st_names
         }
+    }
+
+    fn emit_panic_call(&mut self, out: &String, message: &str) -> HIRStatementsResult {
+        Ok(vec![hir::Statement::Call(hir::LValue::Var(out.clone()),
+            hir::Callable::Call("panic".to_string(), true, vec![
+                hir::Val::Str(message.to_string())
+            ])
+        )])
+    }
+
+    fn emit_print_function(&mut self) -> HIRFunctionResult {
+        let variants = vec![(hir::Type::Nothing, "nothing"), (hir::Type::Str, "string"), (hir::Type::Bool, "bool"), (hir::Type::Int64, "int")];
+        let cond_vars = vec![self.mk_intermediate_var(); variants.len()];
+        let tmp = self.mk_intermediate_var();
+
+        let mut body = hir::Block::new(vec![]);
+        let mut local_vars = vec![tmp.clone()];
+
+        local_vars.extend(cond_vars.clone());
+
+        let param = hir::Val::Var("value".to_string());
+
+        for ((htype, _), cond_var) in variants.iter().zip(cond_vars.iter()) {
+            body.push(
+                hir::Statement::Call(
+                    hir::LValue::Var(cond_var.clone()),
+                    hir::Callable::IsType(param.clone(), htype.clone())
+                ));
+        }
+
+        // Well. I had to do it. That was not funny.
+        body = body.merge(variants.into_iter().zip(cond_vars.into_iter()).fold(
+            hir::Block::new(self.emit_panic_call(&tmp, "Value passed to print is not printable!")?), |prev_block, ((_, native_suffix), cond_var)| {
+                hir::Block::new(
+                    vec![
+                        hir::Statement::If(hir::Val::Var(cond_var),
+                            hir::Block::new(vec![hir::Statement::Call(
+                                hir::LValue::Var(tmp.clone()),
+                                hir::Callable::Call(format!("print_{}", native_suffix),
+                                    true,
+                                    vec![hir::Val::Var("value".to_string())]
+                                )
+                            )]),
+                            prev_block
+                        )
+                    ]
+                )
+        }));
+
+        Ok(hir::Function::new("print".to_string(), vec!["value".to_string()], local_vars, body))
+    }
+
+    fn emit_println_function(&mut self) -> HIRFunctionResult {
+        // println := print(x); print("\n")
+        let tmp = self.mk_intermediate_var();
+        let calls_block = hir::Block::new(vec![
+            hir::Statement::Call(hir::LValue::Var(tmp.clone()),
+                hir::Callable::Call("print".to_string(), false, vec![hir::Val::Var("value".to_string())])
+            ),
+            hir::Statement::Call(hir::LValue::Var(tmp.clone()),
+                hir::Callable::Call("print".to_string(), false, vec![hir::Val::Str("\n".to_string())])
+            )
+        ]);
+        Ok(hir::Function::new("println".to_string(), vec!["value".to_string()], vec![tmp], calls_block))
+    }
+
+    fn emit_core_declarations(&mut self) -> HIRDeclsResult {
+        Ok(vec![self.emit_print_function()?, self.emit_println_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
     }
 
     fn mk_intermediate_var(&mut self) -> String {
@@ -251,7 +326,7 @@ impl Emitter {
                 } else {
                     stmts.push(
                         hir::Statement::Call(hir::LValue::Var(out.clone()),
-                        hir::Callable::Call(name.clone(), false, vals))
+                        hir::Callable::Call(name.clone(), is_native_function(&name), vals))
                     );
                 }
 
@@ -374,7 +449,7 @@ impl Emitter {
 
                 stmts.push(hir::Statement::Call(
                     hir::LValue::Var(self.mk_intermediate_var()),
-                    hir::Callable::Call(f_name.clone(), false, vals),
+                    hir::Callable::Call(f_name.clone(), is_native_function(&f_name), vals),
                 ));
 
                 Ok(stmts)
@@ -645,13 +720,9 @@ impl Emitter {
             functions.sort_by_key(|(w, _, _)| *w);
 
             // fold over all blocks to build the if cascade in selectivity order.
-            let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(hir::Block::new(vec![
-                        hir::Statement::Call(hir::LValue::Var(out.clone()),
-                            hir::Callable::Call("panic".to_string(), true, vec![
-                                hir::Val::Str(format!("Dynamic dispatch failure for function call '{}'", name))
-                            ])
-                        )
-            ]), |prev_block, (weight, cond_val, name)| {
+            let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(
+                    hir::Block::new(self.emit_panic_call(&out, &format!("Dynamic dispatch failure for function call '{}'", name))?)
+            , |prev_block, (weight, cond_val, name)| {
                 let call_block = hir::Block::new(vec![
                     hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Call(name, false,
@@ -733,6 +804,10 @@ pub fn typed_ast_to_hir(t_ast: TypedDecls) -> HIRSourceResult {
     }
 
     let mut emitter = Emitter::init(t_ast.structures.keys().cloned().collect());
+
+    // print, println
+    compiled.extend(emitter.emit_core_declarations()?);
+
     // generate entrypoint based on the global expressions, where all variables *are global*.
     let (globals, fun) = emitter.emit_entrypoint(
                 t_ast.functions.iter().flat_map(|(name, f_s)| fun_name_variants(name, f_s.len())).collect(),
