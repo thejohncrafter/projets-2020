@@ -375,6 +375,9 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
             type_expression(tcx, &mut range.start)?;
             type_expression(tcx, &mut range.end)?;
 
+            range.start.static_ty = StaticType::Int64;
+            range.end.static_ty = StaticType::Int64;
+
             let local_extra_vars = tcx.extend_local_env(collect_all_assign_in_array(&block.val));
             tcx.push_to_env(&ident, StaticType::Int64, Scope::Local);
             tcx.enter_in_local_scope();

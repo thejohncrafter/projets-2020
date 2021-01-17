@@ -51,6 +51,7 @@ pub enum Callable {
 #[derive(Debug, Clone)]
 pub enum LValue {
     Var(String),
+    // structure, structure name, field name
     Access(Val, String, String),
 }
 

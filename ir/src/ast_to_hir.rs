@@ -38,13 +38,27 @@ fn is_native_function(n: &str) -> bool {
     }
 }
 
+#[derive(Debug, Clone)]
+struct FunctionMetadata {
+    pub ret_ty: Option<hir::Type>
+}
+
+impl FunctionMetadata {
+    pub fn new(ret_ty: StaticType) -> Self {
+        FunctionMetadata {
+            ret_ty: from_static_type(ret_ty)
+        }
+    }
+}
+
 struct Emitter {
     pub next_intermediate_variable_id: u64,
     pub current_local_vars: HashSet<String>,
     pub current_params: HashSet<String>,
     pub global_vars: HashSet<String>, // renamed names.
     pub structure_names: HashSet<String>,
-    pub in_entrypoint: bool
+    pub in_entrypoint: bool,
+    pub f_metadata: HashMap<String, FunctionMetadata>
 }
 
 impl Emitter {
@@ -54,7 +68,8 @@ impl Emitter {
             global_vars: HashSet::new(),
             current_params: HashSet::new(),
             structure_names: st_names,
-            in_entrypoint: false
+            in_entrypoint: false,
+            f_metadata: [("div".to_string(), FunctionMetadata::new(StaticType::Int64))].iter().cloned().collect()
         }
     }
 
@@ -153,6 +168,66 @@ impl Emitter {
         Ok(stmts)
     }
 
+    fn emit_type_guard(&mut self, lv: hir::LValue, expected: hir::Type) -> HIRStatementsResult {
+        // panic if type is not the expected one.
+        match lv {
+            hir::LValue::Var(var) => {
+                let mut stmts = vec![];
+
+                let type_cond = self.mk_intermediate_var();
+                let tmp = self.mk_intermediate_var();
+
+                stmts.push(
+                    hir::Statement::Call(
+                        hir::LValue::Var(type_cond.clone()),
+                        hir::Callable::IsType(hir::Val::Var(var.clone()), expected.clone())
+                    )
+                );
+
+                stmts.push(
+                    hir::Statement::If(
+                        hir::Val::Var(type_cond),
+                        hir::Block::new(self.emit_panic_call(
+                                &tmp,
+                                &format!(
+                                    "Type guard assertion failure, unexpected type for variable '{}', expected: '{}'!",
+                                    var,
+                                    expected))?),
+                        hir::Block::new(vec![])
+                    )
+                );
+
+                Ok(stmts)
+            },
+            hir::LValue::Access(s_val, s_name, field_name) => {
+                let tmp = self.mk_intermediate_var();
+                let mut stmts = vec![];
+
+                stmts.push(hir::Statement::Call(
+                        hir::LValue::Var(tmp.clone()),
+                        hir::Callable::Access(s_val, s_name.clone(), field_name.clone())
+                ));
+
+                stmts.extend(
+                    self.emit_type_guard(
+                        hir::LValue::Var(tmp),
+                        expected)?
+                );
+
+                Ok(stmts)
+            }
+        }
+    }
+
+    fn emit_multiple_type_guards(&mut self, values: Vec<hir::LValue>, expected: Vec<hir::Type>) -> HIRStatementsResult {
+        values.into_iter().zip(expected.into_iter())
+            .map(|(lv, ex)| self.emit_type_guard(lv, ex))
+            .flat_map(|result| match result {
+                Ok(stmts) => stmts.into_iter().map(|item| Ok(item)).collect(),
+                Err(err) => vec![Err(err)]
+            }).collect::<HIRStatementsResult>()
+    }
+
     fn emit_core_declarations(&mut self) -> HIRDeclsResult {
         Ok(vec![self.emit_print_function()?, self.emit_div_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
     }
@@ -168,18 +243,6 @@ impl Emitter {
         out
     }
 
-    fn emit_unique_gvar_name(&mut self, gvar: &String) -> String {
-        let mut out = format!("_g{}", gvar);
-        let mut idx = 0;
-
-        while self.global_vars.contains(&out) {
-            out = format!("_g{}{}", gvar, idx);
-            idx += 1;
-        }
-
-        out
-    }
-
     fn emit_block_value(&mut self, b: &Block) -> HIRValueResult {
         // the value of a block is the value of its last statement.
         if let Some((last, head)) = b.val.split_last() {
@@ -190,6 +253,26 @@ impl Emitter {
             Ok((stmts, last_val))
         } else {
             Ok((vec![], hir::Val::Nothing))
+        }
+    }
+
+    fn emit_lvalue_value(&mut self, lv: &LValue) -> HIRValueResult {
+        match lv.in_exp.as_ref() {
+            None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
+            Some(p_exp) => {
+                match &p_exp.static_ty {
+                    StaticType::Struct(s) => {
+                        let (mut stmts, st_val) = self.emit_value(&p_exp)?;
+                        let access_out = self.mk_intermediate_var();
+
+                        stmts.push(hir::Statement::Call(hir::LValue::Var(access_out.clone()),
+                                    hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
+
+                        Ok((stmts, hir::Val::Var(access_out)))
+                    },
+                    _ => Err(format!("[T-AST] Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
+                }
+            }
         }
     }
 
@@ -258,25 +341,7 @@ impl Emitter {
             ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst))),
             ExpVal::Bool(cst) => Ok((vec![], hir::Val::Const(hir::Type::Bool, if *cst {1} else {0}))),
             ExpVal::Str(cst) => Ok((vec![], hir::Val::Str(cst.clone()))),
-            ExpVal::LValue(lv) => {
-                match lv.in_exp.as_ref() {
-                    None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
-                    Some(p_exp) => {
-                        match &p_exp.static_ty {
-                            StaticType::Struct(s) => {
-                                let (mut stmts, st_val) = self.emit_value(&p_exp)?;
-                                let access_out = self.mk_intermediate_var();
-
-                                stmts.push(hir::Statement::Call(hir::LValue::Var(access_out.clone()),
-                                            hir::Callable::Access(st_val, s.clone(), lv.name.clone())));
-
-                                Ok((stmts, hir::Val::Var(access_out)))
-                            },
-                            _ => Err(format!("[T-AST] Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
-                        }
-                    }
-                }
-            },
+            ExpVal::LValue(lv) => self.emit_lvalue_value(&lv),
             ExpVal::Mul(cst, var) => {
                 let out = self.mk_intermediate_var();
                 Ok((vec![
@@ -350,10 +415,29 @@ impl Emitter {
                     } else if name == "print" {
                         stmts.extend(self.unpack_variadic_call(&out, &name, false, &vals)?);
                     } else {
+                        // if types are statically known, just emit the type guard.
+                        //stmts.extend(self.emit_multiple_type_guards(
+                        //        vals.iter().cloned().collect(),
+                        //    )?);
                         stmts.push(
                             hir::Statement::Call(hir::LValue::Var(out.clone()),
                             hir::Callable::Call(name.clone(), is_native_function(&name), vals))
                         );
+                        // if out type is statically known, emit the type guard.
+                        if let Some(fun_metadata) = self.f_metadata.get(name) {
+                            if let Some(hir_ret_ty) = fun_metadata.ret_ty.clone() {
+                                stmts.extend(
+                                    self.emit_type_guard(hir::LValue::Var(out.clone()), hir_ret_ty.clone())?
+                                );
+                            }
+                        } // Otherwise, this is a dyn-dispatch, the out is checked by the thunk itself.
+
+                        // if this node has a static type.
+                        if let Some(hir_ty) = from_static_type(e.static_ty.clone()) {
+                            stmts.extend(
+                                self.emit_type_guard(hir::LValue::Var(out.clone()), hir_ty)?
+                            );
+                        }
                     }
                 }
 
@@ -395,8 +479,17 @@ impl Emitter {
 
                 Ok((stmts, hir::Val::Var(out)))
             },
+            // Support x = y = z = … = e
+            ExpVal::Assign(lv, _) => {
+                let mut stmts = self.emit_statements(e)?;
+                let (stmts_lv, val_lv) = self.emit_lvalue_value(&lv)?;
+                stmts.extend(stmts_lv);
+
+                // now we want to say that we created value ((stmts, lv))
+                Ok((stmts, val_lv))
+            },
             // They produce nothing.
-            ExpVal::Assign(_, _) | ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
+            ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
                 let stmts = self.emit_statements(e)?;
 
                 Ok((stmts, hir::Val::Nothing))
@@ -660,6 +753,7 @@ impl Emitter {
         self.current_params = f.params.iter().map(|f| f.name.name.clone()).collect();
         self.next_intermediate_variable_id = 0;
 
+        self.f_metadata.insert(name.clone(), FunctionMetadata::new(f.ret_ty.clone()));
 
         let block = self.emit_block(&f.body, true)?;
         Ok(hir::Function::new(
@@ -768,13 +862,21 @@ impl Emitter {
             let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(
                     hir::Block::new(self.emit_panic_call(&out, &format!("Dynamic dispatch failure for function call '{}'", name))?)
             , |prev_block, (weight, cond_val, name)| {
-                let call_block = hir::Block::new(vec![
+                let mut call_block = hir::Block::new(vec![
                     hir::Statement::Call(hir::LValue::Var(out.clone()),
-                        hir::Callable::Call(name, false,
+                        hir::Callable::Call(name.clone(), false,
                             args.clone())
                         )
                 ]);
 
+                if let Some(fun_metadata) = self.f_metadata.get(&name) {
+                    if let Some(hir_ret_ty) = fun_metadata.ret_ty.clone() {
+                        call_block.extend(
+                            self.emit_type_guard(hir::LValue::Var(out.clone()), hir_ret_ty.clone()).unwrap() // Should never crash.
+                        );
+                    }
+                } 
+                
                 if weight == 0 { call_block }
                 else {
                     hir::Block::new(vec![hir::Statement::If(cond_val.clone(), call_block, prev_block)])
@@ -792,6 +894,17 @@ impl Emitter {
                 .collect())
         } else {
             Ok(vec![hir::Decl::Function(self.emit_fn(f_s.first().unwrap(), name.clone())?)])
+        }
+    }
+
+    fn introduce_metadata(&mut self, functions: &HashMap<String, Vec<Function>>) {
+        for (name, f_s) in functions {
+            if f_s.len() == 1 {
+                self.f_metadata.insert(
+                    name.clone(),
+                    FunctionMetadata::new(f_s.first().unwrap().ret_ty.clone())
+                );
+            }
         }
     }
 
@@ -868,6 +981,8 @@ pub fn typed_ast_to_hir(t_ast: TypedDecls) -> HIRSourceResult {
 
     // print, println
     compiled.extend(emitter.emit_core_declarations()?);
+
+    emitter.introduce_metadata(&t_ast.functions);
 
     // generate entrypoint based on the global expressions, where all variables *are global*.
     let (globals, fun) = emitter.emit_entrypoint(
