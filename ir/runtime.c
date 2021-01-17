@@ -5,10 +5,10 @@
 #include <inttypes.h>
 #include <math.h>
 
-#define TYPE_NOTHING 0
-#define TYPE_INT64 1
-#define TYPE_BOOL 2
-#define TYPE_STR 3
+#define TYPE_NOTHING 1
+#define TYPE_INT64 2
+#define TYPE_BOOL 3
+#define TYPE_STR 4
 
 // Assuming a 64-bits machine, we get 64 bits long pointers.
 
@@ -41,12 +41,12 @@ void native_print_bool(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t va
 
 void native_print_int(int64_t *ret_ty, int64_t *ret_val, int64_t ty, int64_t val) {
     if(ty != TYPE_INT64) {
-        printf("Got ty = %" PRIu64 "; val = %" PRIu64 "\n", ty, val);
+        printf("Got ty = %" PRIi64 "; val = %" PRIi64 "\n", ty, val);
         fprintf(stderr, "Expected a Int64 for print_int.\n");
         exit(1);
     }
 
-    printf("%" PRIu64, val);
+    printf("%" PRIi64, val);
 
     *ret_ty = TYPE_NOTHING;
     *ret_val = 0;
@@ -80,7 +80,7 @@ void native_alloc(int64_t *ret_ty, int64_t *ret_val, int64_t type_id, int64_t me
     // We will trust the caller
     // because every call to this function is done from 
 
-    int64_t* pointer = malloc(mem_len);
+    int64_t* pointer = calloc(mem_len, sizeof(char));
 
     *ret_ty = type_id;
     *ret_val = (int64_t) pointer;

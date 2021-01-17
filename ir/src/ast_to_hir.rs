@@ -434,27 +434,33 @@ impl Emitter {
                 let (stmts_start, val_start) = self.emit_value(&range.start)?;
                 let (stmts_end, val_end) = self.emit_value(&range.end)?;
 
+                let counter_var = self.mk_intermediate_var();
                 let mut stmts = stmts_start.into_iter().chain(stmts_end).collect::<Vec<_>>();
-                stmts.push(hir::Statement::Call(hir::LValue::Var(c.name.clone()),
+                stmts.push(hir::Statement::Call(hir::LValue::Var(counter_var.clone()),
                         hir::Callable::Assign(val_start)));
                 let boolean_val = self.mk_intermediate_var();
 
                 let increment_counter_stmt = hir::Statement::Call(
-                    hir::LValue::Var(c.name.clone()),
+                    hir::LValue::Var(counter_var.clone()),
                     hir::Callable::Bin(hir::BinOp::Add,
-                        hir::Val::Var(c.name.clone()),
+                        hir::Val::Var(counter_var.clone()),
                         hir::Val::Const(hir::Type::Int64, 1)));
 
                 let boolean_update_stmt = hir::Statement::Call(
                     hir::LValue::Var(boolean_val.clone()),
                     hir::Callable::Bin(hir::BinOp::Leq,
-                        hir::Val::Var(c.name.clone()),
+                        hir::Val::Var(counter_var.clone()),
                         val_end
                     ));
 
                 self.current_local_vars.insert(c.name.clone());
 
-                let mut body_block = self.emit_block(&body, false)?;
+                let mut body_block = hir::Block::new(vec!());
+                body_block.push(hir::Statement::Call(
+                    hir::LValue::Var(c.name.clone()),
+                    hir::Callable::Assign(hir::Val::Var(counter_var.clone()))
+                ));
+                body_block = body_block.merge(self.emit_block(&body, false)?);
 
                 body_block.push(increment_counter_stmt);
                 body_block.push(boolean_update_stmt);

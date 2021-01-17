@@ -174,7 +174,7 @@ fn main() {
         let type_only = matches.is_present("type-only");
         let asm_only = matches.is_present("asm-only");
         let debug_hir = matches.is_present("debug-hir");
-        let debug_lir = matches.is_present("debug_lir");
+        let debug_lir = matches.is_present("debug-lir");
 
         let res = compile(input_filename, output_filename,
             parse_only,

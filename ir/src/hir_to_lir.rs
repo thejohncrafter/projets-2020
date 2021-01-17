@@ -141,13 +141,13 @@ impl GlobalRegistry {
 
     fn get_ty_id(&self, ty: &ConcreteType) -> Result<lir::Val, Error> {
         match ty {
-            ConcreteType::Nothing => Ok(lir::Val::Const(0)),
-            ConcreteType::Int64 => Ok(lir::Val::Const(1)),
-            ConcreteType::Bool => Ok(lir::Val::Const(2)),
-            ConcreteType::Str => Ok(lir::Val::Const(3)),
+            ConcreteType::Nothing => Ok(lir::Val::Const(1)),
+            ConcreteType::Int64 => Ok(lir::Val::Const(2)),
+            ConcreteType::Bool => Ok(lir::Val::Const(3)),
+            ConcreteType::Str => Ok(lir::Val::Const(4)),
             ConcreteType::Struct(name) => {
                 match self.structs_map.get(name) {
-                    Some(data) => Ok(lir::Val::Const(data.id + 4)),
+                    Some(data) => Ok(lir::Val::Const(data.id + 5)),
                     None => Err(format!("[HIR] Structure \"{}\" was not declared", name).into()),
                 }
             }
@@ -542,7 +542,17 @@ fn compile_fn(
     let mut local = LocalRegistry::new(&global, &vars_and_params);
     let mut lbl_gen = LabelGenerator::new();
 
-    let body = compile_block(&mut lbl_gen, &global, &mut local, &f.body)?;
+    let mut body = Vec::new();
+    f.vars.iter()
+        .try_for_each(|name| -> Result<(), Error> {
+            body.push(lir::Statement::Inst(lir::Instruction::Mov(
+                local.get_var(name)?.ty_name.clone(), lir::Val::Const(0)
+            )));
+            Ok(())
+        })?;
+
+    let mut statements = compile_block(&mut lbl_gen, &global, &mut local, &f.body)?;
+    body.append(&mut statements);
 
     let mut lir_args = Vec::new();
     f.args.iter().try_for_each(|arg| -> Result<(), Error> {
@@ -595,6 +605,15 @@ pub fn hir_to_lir(hir: &hir::Source) -> Result<lir::Source, Error> {
                 hir::Decl::Struct(_) => (),
                 hir::Decl::Function(f) => compiled.push(compile_fn(&global, f)?),
             }
+            Ok(())
+        })?;
+
+    let mut initializer = Vec::new();
+    hir.globals.iter()
+        .try_for_each(|name| -> Result<(), Error> {
+            initializer.push(lir::Statement::Inst(lir::Instruction::Mov(
+                global.get_var(name)?.ty_name.clone(), lir::Val::Const(0)
+            )));
             Ok(())
         })?;
 
