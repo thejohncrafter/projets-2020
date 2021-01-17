@@ -258,13 +258,13 @@ de temps à recopier des noms de variables).
 Une première solution est de simplement utiliser des types `Cow` (_Copy On Write_) de Rust.
 
 On aurait aussi pu chercher des optimisations plus intelligentes (en
-cerchant à utiliser des références pour les objets qui sont susceptibles
+cherchant à utiliser des références pour les objets qui sont susceptibles
 d'être souvent réutilisés) mais cela aurait induit beaucoup trop
 de _borrow fighting_ et nous avons préféré nous abstenir.
 
 #### HIR
 
-Le HIR est prévu pour permettre d'introduire du SAA.
+Le HIR est prévu pour permettre d'introduire du Single Static Assignment.
 
 #### LIR
 
@@ -283,9 +283,9 @@ du code en C assez complexe, on aurait donc pu implémenter un _garbage collecto
 
 #### Perfect Optimizer 3000
 
-On pourrait décider d'implémenter un interpéteur et d'essayer
+On pourrait décider d'implémenter un interpréteur et d'essayer
 d'interpréter les programmes au moment de la compilation pour
-produire des binaires qui se contentent d'afficher le résultat...
+produire des binaires qui se contentent d'afficher le résultat.
 
 ### Ce qui n'a pas été fait
 
@@ -337,22 +337,30 @@ Finalement, notre analyseur syntaxique est bien conforme au sujet...
 #### Analyse sémantique
 
 ```
-Test de ../../target/debug/parser
-
-
 Partie 2
-mauvais ..................
-ECHEC sur typing/bad/testfile-nothing-1.jl (devrait échouer)
-...........
+mauvais ..............................
 bons ..............................
 ECHEC sur exec/int64.jl (devrait reussir)
 ..............................
-Partie 2: 87/89 : 97%
+Partie 2: 88/89 : 98%
 ```
 
-Comme indiqué, précédemment, le test sur `nothing` sera fixé dans la refactorisation.
-
 ### Exécution
+
+```
+Partie 3:
+Compilation : 52/53 : 98%
+Code produit : 38/53 : 71%
+Comportement du code : 35/53 : 66%
+```
+
+Concrètement, les majeurs problèmes de la compilation sont:
+
+- l'absence de protection des types à la frontière des appels de fonction: un début d'implémentation se trouve dans notre repo dans `type-guards` ;
+- l'absence d'un dynamic dispatch en rapport avec la protection des types des valeurs
+- des confusions sur la division et l'opérateur modulo
+- des problèmes autour des structures
+
 
 ### Interprétation
 

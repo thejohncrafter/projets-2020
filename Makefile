@@ -51,6 +51,10 @@ check:
 
 clean:
 	@$(CARGO) clean
+	rm -rf contrib/compil/**/*.o
+	rm -rf contrib/compil/**/*.s
+	rm -rf contrib/compil/**/*.hir
+	rm -rf contrib/compil/**/*.lir
 
 doc:
 	@$(CARGO) doc
