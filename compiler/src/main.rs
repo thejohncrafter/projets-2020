@@ -1,6 +1,8 @@
 use std::fs::File;
+use std::fs::read_dir;
 use std::io::prelude::*;
 use std::path::Path;
+use std::env;
 
 use std::process::{Command, Stdio};
 
@@ -16,7 +18,7 @@ fn read_file(name: &str) -> Result<String, String> {
     let display = path.display();
 
     let mut file = match File::open(&path) {
-        Err(why) => panic!("Couldn't open {} : {}", display, why),
+        Err(why) => panic!("Couldn't open for read {} : {}", display, why),
         Ok(file) => file,
     };
     
@@ -29,9 +31,11 @@ fn read_file(name: &str) -> Result<String, String> {
 fn write_file(name: &str, contents: &str) -> Result<(), String> {
     let path = Path::new(name);
     let display = path.display();
+    let cwd = env::current_dir().map_err(|err| err.to_string())?;
+    let cwd_display = cwd.display();
 
     let mut file = match File::create(&path) {
-        Err(why) => Err(format!("Couldn't open {} : {}", display, why)),
+        Err(why) => Err(format!("Couldn't open for write {} : {} (cwd: {})", display, why, cwd_display)),
         Ok(file) => Ok(file),
     }?;
 
