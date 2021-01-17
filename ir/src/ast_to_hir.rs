@@ -65,6 +65,25 @@ impl Emitter {
         )])
     }
 
+    fn emit_div_function(&mut self) -> HIRFunctionResult {
+        let stmts = vec![hir::Statement::Call(
+                hir::LValue::Var("out".to_string()),
+                hir::Callable::Bin(hir::BinOp::Div,
+                    hir::Val::Var("num".to_string()),
+                    hir::Val::Var("denom".to_string())
+                )
+            ),
+            hir::Statement::Return(hir::Val::Var("out".to_string()))
+        ];
+
+        Ok(hir::Function::new(
+                "div".to_string(),
+                vec!["num".to_string(), "denom".to_string()],
+                vec!["out".to_string()],
+                hir::Block::new(stmts)
+            ))
+    }
+
     fn emit_print_function(&mut self) -> HIRFunctionResult {
         let variants = vec![(hir::Type::Nothing, "nothing"), (hir::Type::Str, "string"), (hir::Type::Bool, "bool"), (hir::Type::Int64, "int")];
         let cond_vars = vec![self.mk_intermediate_var(); variants.len()];
@@ -122,7 +141,7 @@ impl Emitter {
     }
 
     fn emit_core_declarations(&mut self) -> HIRDeclsResult {
-        Ok(vec![self.emit_print_function()?, self.emit_println_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
+        Ok(vec![self.emit_print_function()?, self.emit_println_function()?, self.emit_div_function()?].into_iter().map(|fun| hir::Decl::Function(fun)).collect())
     }
 
     fn mk_intermediate_var(&mut self) -> String {
