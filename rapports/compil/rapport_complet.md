@@ -276,6 +276,11 @@ En l'état, on introduit beaucoup de movements entre les registres
 qui pourraient être évités avec un algorithme d'allocation un
 tant soit peu efficace.
 
+#### Runtime
+
+Le système de « runtime » que nous avons implémenté permet d'introduire
+du code en C assez complexe, on aurait donc pu implémenter un _garbage collector_.
+
 #### Perfect Optimizer 3000
 
 On pourrait décider d'implémenter un interpéteur et d'essayer
