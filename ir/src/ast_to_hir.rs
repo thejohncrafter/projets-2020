@@ -737,7 +737,9 @@ pub fn typed_ast_to_hir(t_ast: TypedDecls) -> HIRSourceResult {
         compiled.extend(emitter.emit_dynamic_dispatch(&name, &f_s)?);
     }
 
+    let entrypoint_name = fun.name.clone();
+
     compiled.push(hir::Decl::Function(fun));
     
-    Ok(hir::Source::new(globals, compiled))
+    Ok(hir::Source::new(globals, entrypoint_name, compiled))
 }
