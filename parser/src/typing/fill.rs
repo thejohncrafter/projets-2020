@@ -114,20 +114,6 @@ pub fn type_simple_assign<'a>(tcx: &mut TypingContext<'a>, lv: &mut LValue<'a>, 
         }
     }
 
-    /*
-    // Only replace the type if it improves it.
-    let current_type = tcx.environment.get_mut(&lv.name).unwrap().pop();
-    match current_type {
-        None => tcx.environment.get_mut(&lv.name).unwrap().push(e.static_ty.clone()),
-        Some(ct) => {
-            if is_valuable_type(ct.as_ref(), e.static_ty.as_ref()) {
-                tcx.environment.get_mut(&lv.name).unwrap().push(e.static_ty.clone());
-            } else {
-                tcx.environment.get_mut(&lv.name).unwrap().push(ct);
-            }
-        }
-    }*/
-
     Ok(())
 }
 
@@ -139,6 +125,20 @@ fn type_complex_assign<'a>(tcx: &mut TypingContext<'a>, name: &String, span: &Sp
         return Err(
             (span.clone(), format!("Field '{}' does not exist for the type '{}'", name, prefix_e.static_ty).to_string()).into()
         );
+    }
+
+    // If we do not know the type, we can just assume the static type to be the one which is
+    // related to the unique structure containing this field if it exist at all.
+    if prefix_e.static_ty == StaticType::Any {
+        match tcx.structure_name_by_fields.get(name) {
+            None => {
+                return Err(
+                (span.clone(), format!("Field '{}' is not declared anywhere in any structure", name).to_string()).into());
+            },
+            Some(s) => {
+                prefix_e.static_ty = StaticType::Struct(s.clone());
+            }
+        }
     }
 
     if !tcx.mutable_fields.contains(name) {
@@ -313,6 +313,10 @@ pub fn type_expression<'a>(tcx: &mut TypingContext<'a>, expr: &mut Exp<'a>) -> I
                         return Err(
                             (lv.span, format!("No field named '{}' in any structure", &lv.name).to_string()).into()
                         );
+                    }
+
+                    if e.static_ty == StaticType::Any {
+                        e.static_ty = StaticType::Struct(tcx.structure_name_by_fields.get(&lv.name).unwrap().clone());
                     }
 
                     expr.static_ty = tcx.all_fields[&lv.name].clone();

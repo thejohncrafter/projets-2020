@@ -3,20 +3,31 @@ CARGO = cargo --color $(COLOR)
 
 .PHONY: all bench build check clean doc install publish run test update
 
+COMPILER = $(shell pwd)/target/release/compiler
+
 all: build
 
 bench:
 	@$(CARGO) bench
 
 build-pjuliac:
-	@$(CARGO) build --release --bin parser
-	ln -sf ./target/release/parser ./pjuliac
+	@$(CARGO) build --release --bin compiler
+	ln -sf ./target/release/compiler ./pjuliac
 
-run-pjuliac: build-pjuliac
-	@$(CARGO) run --bin parser
+build-runtime:
+	@$(CC) -c ir/runtime.c -o ./target/release/runtime.o
 
-test-pjuliac: build-pjuliac
-	cd contrib/compil; ./test.sh -1 ../../target/release/parser && ./test.sh -2 ../../target/release/parser
+make-available-runtime: build-runtime
+	ln -sf $(shell pwd)/target/release/runtime.o contrib/compil/runtime.o
+
+run-pjuliac: build-pjuliac build-runtime
+	@$(CARGO) run --bin compiler
+
+test-pjuliac: build-pjuliac make-available-runtime
+	cd contrib/compil; ./test.sh -all ../../target/release/compiler
+
+test-pjuliac-verbose: build-pjuliac make-available-runtime
+	cd contrib/compil; ./test.sh -v1 $(COMPILER) && ./test.sh -v2 $(COMPILER) && ./test.sh -v3 $(COMPILER)
 
 tarball-pjuliac:
 	mkdir -p /tmp/Lahfa-Marquet
@@ -24,10 +35,16 @@ tarball-pjuliac:
 	cp -r parsergen /tmp/Lahfa-Marquet/
 	cp -r parser /tmp/Lahfa-Marquet/
 	cp -r contrib /tmp/Lahfa-Marquet
+	cp -r ir /tmp/Lahfa-Marquet
+	cp -r compiler /tmp/Lahfa-Marquet
 	cp Makefile /tmp/Lahfa-Marquet/
-	cp compil/compil_cargo.txt /tmp/Lahfa-Marquet/Cargo.toml
-	cp rapports/compil/rapport_miprojet.pdf /tmp/Lahfa-Marquet/rapport.pdf
+	cp Cargo.toml /tmp/Lahfa-Marquet/Cargo.toml
+	rm -r /tmp/Lahfa-Marquet/**/target
+	sed -i 's/"sim", //' /tmp/Lahfa-Marquet/Cargo.toml
+	cp rapports/compil/rapport_miprojet.pdf /tmp/Lahfa-Marquet/rapport_p1.pdf
+	cp rapports/compil/rapport_complet.pdf /tmp/Lahfa-Marquet/rapport_p2.pdf
 	cd /tmp; zip -r -9 Lahfa-Marquet.zip ./Lahfa-Marquet/**
+	mv /tmp/Lahfa-Marquet.zip .
 
 check:
 	@$(CARGO) check

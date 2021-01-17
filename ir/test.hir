@@ -1,0 +1,44 @@
+
+globals: test_var;
+entry: main;
+
+struct structure {a}
+
+fn fact(n)
+    vars: cond, n, m, val;
+{
+    cond <- n == (Int64, 1);
+    
+    if cond {
+        val <- (Int64, 1);
+    } else {
+        m <- n - (Int64, 1);
+        val <- call fact(m);
+        val <- n * val;
+    }
+
+    return val;
+}
+
+fn print_test_var()
+    vars: i, _;
+{
+    i <- test_var[structure.a];
+    _ <- call native print_int(i);
+}
+
+fn main()
+    vars: n, _;
+{
+    test_var <- alloc structure;
+
+    _ <- call native print_string("Hello world !");
+    test_var[structure.a] <- call fact((Int64, 5));
+    _ <- call print_test_var();
+
+    test_var[structure.a] <- call native pow((Int64, 2), (Int64, 6));
+    _ <- call print_test_var();
+
+    return (Int64, 0);
+}
+

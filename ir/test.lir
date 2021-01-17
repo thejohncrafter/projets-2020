@@ -1,0 +1,35 @@
+
+globals: test_val;
+
+fn fact(n)
+    vars: n, not_zero, k, prev, val;
+{
+    not_zero <- n != 0;
+    jumpif not_zero not_zero;
+zero:
+    return 0, 1;
+not_zero:
+    prev <- n - 1;
+    (prev, k) <- call fact(prev);
+    val <- k * n;
+    return 0, val;
+}
+
+fn print_test_val()
+    vars: _;
+{
+    (_, _) <- call native native_print_int(1, test_val);
+}
+
+fn main()
+    vars: a, _;
+{
+    call native native_print_string(3, "fact :");
+    (_, a) <- call fact(5);
+    call native native_print_int(1, a);
+
+    call native native_print_string(3, "pow :");
+    (_, test_val) <- call native native_pow(1, 2, 1, 6);
+    call print_test_val();
+}
+

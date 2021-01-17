@@ -1,6 +1,5 @@
-
 [package]
-name = "parser"
+name = "ir"
 version = "0.1.0"
 authors = ["thejohncrafter"]
 edition = "2018"
@@ -11,4 +10,4 @@ edition = "2018"
 clap = "2.33.3"
 automata = {path = "../automata"}
 parsergen = {path = "../parsergen"}
-
+parser = {path = "../parser"}

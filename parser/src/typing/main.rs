@@ -37,6 +37,7 @@ pub fn static_type<'a>(decls: Vec<Decl<'a>>) -> TypingResult<'a> {
         known_types: global_state.known_types,
         mutable_fields: global_state.all_mutable_fields,
         all_fields: global_state.all_structure_fields,
+        structure_name_by_fields: global_state.structure_name_by_fields,
         current_scope: Scope::Global,
         previous_scope: Scope::Global,
         environment

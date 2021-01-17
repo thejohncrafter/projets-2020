@@ -10,6 +10,10 @@ score=0
 max=0
 verbose=0
 
+PJULIA_COMPILER_EXTRA_ARGS=${PJULIA_COMPILER_EXTRA_ARGS:-}
+PJULIA_RUNTIME_OBJECT=${PJULIA_RUNTIME_OBJECT:-$(pwd)/runtime.o}
+
+echo $PJULIA_RUNTIME_OBJECT
 
 echo "Test de $2"
 
@@ -17,10 +21,10 @@ echo
 
 compile () {
 if [[ $verbose != 0 ]]; then
-  echo Compile $1 $2
-  $compilo $1 $2;
+  echo Compile "$@"
+  $compilo "$@" --runtime-object-filename $PJULIA_RUNTIME_OBJECT;
 else
-  $compilo $1 $2 > /dev/null 2>&1;
+  $compilo "$@" --runtime-object-filename $PJULIA_RUNTIME_OBJECT > /dev/null 2>&1;
 fi;
 }
 
@@ -41,7 +45,7 @@ echo -n "mauvais "
 for f in syntax/bad/*.jl; do
     echo -n ".";
     max=`expr $max + 1`;
-    compile --parse-only $f;
+    compile $f --parse-only;
     case $? in
 	"0")
 	echo
@@ -59,7 +63,7 @@ echo -n "bons "
 for f in syntax/good/*.jl typing/bad/*.jl typing/good/*.jl exec/*.jl exec-fail/*.jl; do
     echo -n ".";
     max=`expr $max + 1`;
-    compile --parse-only $f;
+    compile $f --parse-only;
     case $? in
 	"1")
 	echo
@@ -148,14 +152,14 @@ timeout="why3-cpulimit 30 0 -h"
 
 for f in exec/*.jl; do
     echo -n "."
-    asm=exec/`basename $f .jl`.s
-    rm -f $asm
+    binary="./exec/`basename $f .jl`"
+    rm -f $binary
     expected=exec/`basename $f .jl`.out
     max=`expr $max + 1`;
-    if compile $f; then
+    if compile $f "-o $binary"; then
 	rm -f out
 	score_comp=`expr $score_comp + 1`;
-	if gcc -no-pie $asm && ./a.out > out; then
+        if $(binary) > out; then
 	    score_out=`expr $score_out + 1`;
 	    if cmp --quiet out $expected; then
 		score_test=`expr $score_test + 1`;
@@ -179,12 +183,12 @@ echo "-------------------------------"
 
 for f in exec-fail/*.jl; do
     echo -n "."
-    asm=exec-fail/`basename $f .jl`.s
-    rm -f $asm
+    binary="./exec/`basename $f .jl`"
+    rm -f $binary
     max=`expr $max + 1`;
-    if compile $f && gcc -no-pie $asm; then
+    if compile $f "-o $binary"; then
 	score_comp=`expr $score_comp + 1`;
-	if ./a.out > out; then
+        if $(binary) > out; then
 	    echo
 	    echo "ECHEC : devrait échouer sur $f"
 	else
