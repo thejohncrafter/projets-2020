@@ -83,6 +83,11 @@ impl Block {
         self.stmts.extend(stmts);
         self
     }
+
+    pub fn merge(mut self, block: Block) -> Self {
+        self.stmts.extend(block.stmts);
+        self
+    }
 }
 
 impl IntoIterator for Block {

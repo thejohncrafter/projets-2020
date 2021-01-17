@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::iter::once;
 
 use super::hir::types as hir;
 use super::error::*;
@@ -13,6 +14,17 @@ pub type HIRBlockResult = Result<hir::Block, Error>;
 pub type HIRFunctionResult = Result<hir::Function, Error>;
 pub type HIRStructDeclResult = Result<hir::StructDecl, Error>;
 pub type HIRDeclsResult = Result<Vec<hir::Decl>, Error>;
+
+fn from_static_type(s: StaticType) -> Option<hir::Type> {
+    match s {
+        StaticType::Any => None,
+        StaticType::Nothing => Some(hir::Type::Nothing),
+        StaticType::Int64 => Some(hir::Type::Int64),
+        StaticType::Bool => Some(hir::Type::Bool),
+        StaticType::Str => Some(hir::Type::Str),
+        StaticType::Struct(s) => Some(hir::Type::Struct(s))
+    }
+}
 
 struct Emitter {
     pub next_intermediate_variable_id: u64,
@@ -224,7 +236,6 @@ impl Emitter {
                         hir::Block::new(else_stmts)
                      )
                 );
-
 
                 Ok((stmts, hir::Val::Var(out)))
             }
@@ -442,20 +453,131 @@ impl Emitter {
         ))
     }
 
+    fn emit_dynamic_dispatch_condition_signature_match(&mut self, sig: Vec<(String, StaticType)>) -> HIRValueResult {
+        // We want here to compute the condition for a signature match.
+        let mut stmts = vec![];
+        let mut conds_val = vec![];
+        for (arg_name, expected_type) in sig {
+            if let Some(r_type) = from_static_type(expected_type) {
+                let out = self.mk_intermediate_var();
+                conds_val.push(out.clone());
+                stmts.push(
+                    hir::Statement::Call(out,
+                        hir::Callable::IsType(
+                            hir::Val::Var(arg_name.clone()),
+                            r_type
+                        )
+                    )
+                );
+            }
+        }
+
+        // now, we compute the and-value in a fold-fashion.
+        let cond_out = self.mk_intermediate_var();
+        // $cond_out <- true
+        stmts.push(
+            hir::Statement::Call(cond_out.clone(),
+                hir::Callable::Assign(
+                    hir::Val::Const(
+                        hir::Type::Bool,
+                        1
+                    )
+                )
+            )
+        );
+
+        // $cond_out <- $cond_out && $conds_val[i] for all i.
+        conds_val.iter().for_each(|val| {
+            stmts.push(
+                hir::Statement::Call(
+                    cond_out.clone(),
+                    hir::Callable::Bin(
+                        hir::BinOp::And,
+                        hir::Val::Var(cond_out.clone()),
+                        hir::Val::Var(val.clone())
+                    )
+                )
+            );
+        });
+
+        Ok((stmts, hir::Val::Var(cond_out)))
+    }
+
     fn emit_dynamic_dispatch(&mut self, name: &String, f_s: &Vec<Function>) -> HIRDeclsResult {
         if f_s.len() > 1 {
             let mut functions = vec![];
+            let mut fun_decls = vec![];
+            let mut weights = vec![0; f_s.len()]; // Selectivity weights.
+            let mut stmts = vec![];
+            let args: Vec<hir::Val> = f_s.first().unwrap().params.iter().map(|arg| hir::Val::Var(arg.name.name.clone())).collect();
+            let str_sig: Vec<String> = f_s.first().unwrap().params.iter().map(|arg| arg.name.name.clone()).collect();
+            let out = self.mk_intermediate_var();
+
             for (index, f) in f_s.iter().enumerate() {
-                functions.push(hir::Decl::Function(self.emit_fn(f, format!("{}_{}", name, index).to_string())?));
+                // Generate condition: typeof(arg_1) == param_1 && typeof(arg_2) == param_2 && …
+                let (cond_stmt, cond_val) = self.emit_dynamic_dispatch_condition_signature_match(
+                    f.params.iter().map(|param| (param.name.name.clone(), param.ty.clone())).collect()
+                )?;
+                stmts.extend(cond_stmt);
+
+                // Compute selectivity weight
+                weights[index] = f.params.iter().map(|param| return if param.ty != StaticType::Any { 1 } else { 0 }).sum();
+
+                // Rename function.
+                let new_fun_name = format!("{}_{}", name, index).to_string();
+                functions.push((weights[index], cond_val, new_fun_name.clone()));
             }
 
-            // now the dynamic dispatch thunk
-            // generate condition: typeof(arg_1) == param_1 && typeof(arg_2) == param_2 && …
-            // generate blocks: call function of corresponding signature
-            // generate if/elseif/else blocks.
-            // FIXME: do it.
+            let intermediate_vars = self.current_local_vars.drain().collect();
 
-            Ok(functions)
+            // We cannot regroup the for-loops as we rely on the implicit behavior of intermediate
+            // values counting.
+
+            for (index, f) in f_s.iter().enumerate() {
+                fun_decls.push(hir::Decl::Function(self.emit_fn(f, format!("{}_{}", name, index).to_string())?));
+            }
+
+            // Sanity checks:
+            // we only have at most 1 weight of 0.
+            // which is the generic function which can fit our "generic" else case.
+            assert!(weights.iter().filter(|&n| *n == 0).count() <= 1, "Dynamic dispatch disaster: more than one generic function found during phase 1 of compilation");
+
+            // Sort the functions by INCREASING selectivity, we want to build the nodes in the
+            // reverse order.
+            // Starting from the else and going until the first one.
+            functions.sort_by_key(|(w, _, _)| *w);
+
+            // fold over all blocks to build the if cascade in selectivity order.
+            // FIXME(Ryan): the initial value for the fold should be the failure block:
+            let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(hir::Block::new(vec![
+                        hir::Statement::Call(out.clone(),
+                            hir::Callable::Call("panic".to_string(), true, vec![
+                                hir::Val::Str(format!("Dynamic dispatch failure for function call '{}'", name))
+                            ])
+                        )
+            ]), |prev_block, (weight, cond_val, name)| {
+                let call_block = hir::Block::new(vec![
+                    hir::Statement::Call(out.clone(),
+                        hir::Callable::Call(name, false,
+                            args.clone())
+                        )
+                ]);
+
+                if weight == 0 { call_block }
+                else {
+                    hir::Block::new(vec![hir::Statement::If(cond_val.clone(), call_block, prev_block)])
+                }
+            }));
+
+            body.push(hir::Statement::Return(
+                    hir::Val::Var(out)
+            ));
+
+            Ok(fun_decls
+                .into_iter()
+                .chain(once(hir::Decl::Function(
+                            hir::Function::new(name.clone(), str_sig, intermediate_vars, body))))
+                .collect())
         } else {
             Ok(vec![hir::Decl::Function(self.emit_fn(f_s.first().unwrap(), name.clone())?)])
         }
