@@ -42,9 +42,9 @@ struct Emitter {
     pub next_intermediate_variable_id: u64,
     pub current_local_vars: HashSet<String>,
     pub current_params: HashSet<String>,
-    pub old_global_vars: HashMap<String, String>, // original name → renamed name
     pub global_vars: HashSet<String>, // renamed names.
-    pub structure_names: HashSet<String>
+    pub structure_names: HashSet<String>,
+    pub in_entrypoint: bool
 }
 
 impl Emitter {
@@ -52,9 +52,9 @@ impl Emitter {
         Emitter { next_intermediate_variable_id: 0,
             current_local_vars: HashSet::new(),
             global_vars: HashSet::new(),
-            old_global_vars: HashMap::new(),
             current_params: HashSet::new(),
-            structure_names: st_names
+            structure_names: st_names,
+            in_entrypoint: false
         }
     }
 
@@ -127,15 +127,23 @@ impl Emitter {
         Ok(hir::Function::new("print".to_string(), vec!["value".to_string()], local_vars, body))
     }
 
-    fn unpack_println_call(&mut self, tmp: &String, args: &Vec<hir::Val>) -> HIRStatementsResult {
-        // println(…a) := print(a_1); …; print(a_n); print("\n")
+    fn unpack_variadic_call(&mut self, out: &String, fun_name: &String, native: bool, args: &Vec<hir::Val>) -> HIRStatementsResult {
+        // f(…a)= := f(a_1); …; f(a_n)
         let mut stmts = vec![];
 
         for arg in args {
-            stmts.push(hir::Statement::Call(hir::LValue::Var(tmp.clone()),
-                hir::Callable::Call("print".to_string(), false, vec![arg.clone()])
-            ));
+            stmts.push(
+                hir::Statement::Call(hir::LValue::Var(out.clone()),
+                hir::Callable::Call(fun_name.clone(), native, vec![arg.clone()]))
+            );
         }
+
+        Ok(stmts)
+    }
+
+    fn unpack_println_call(&mut self, tmp: &String, args: &Vec<hir::Val>) -> HIRStatementsResult {
+        // println(…a) := print(a_1); …; print(a_n); print("\n")
+        let mut stmts = self.unpack_variadic_call(&tmp, &"print".to_string(), false, args)?;
         stmts.push(
             hir::Statement::Call(hir::LValue::Var(tmp.clone()),
                 hir::Callable::Call("print".to_string(), false, vec![hir::Val::Str("\n".to_string())])
@@ -252,18 +260,7 @@ impl Emitter {
             ExpVal::Str(cst) => Ok((vec![], hir::Val::Str(cst.clone()))),
             ExpVal::LValue(lv) => {
                 match lv.in_exp.as_ref() {
-                    None => {
-                        if lv.scope == Scope::Local {
-                            Ok((vec![], hir::Val::Var(lv.name.clone())))
-                        } else {
-                            match self.old_global_vars.get(&lv.name) {
-                                None => Err(
-                                    format!("[T-AST] Unexpected error, lvalue of type '{}' is scoped globally but no global variables of name '{}' exist!", e.static_ty,
-                                        lv.name).into()),
-                                Some(renamed) => Ok((vec![], hir::Val::Var(renamed.clone())))
-                            }
-                        }
-                    },
+                    None => Ok((vec![], hir::Val::Var(lv.name.clone()))),
                     Some(p_exp) => {
                         match &p_exp.static_ty {
                             StaticType::Struct(s) => {
@@ -350,6 +347,8 @@ impl Emitter {
                 } else {
                     if name == "println" {
                         stmts.extend(self.unpack_println_call(&out, &vals)?);
+                    } else if name == "print" {
+                        stmts.extend(self.unpack_variadic_call(&out, &name, false, &vals)?);
                     } else {
                         stmts.push(
                             hir::Statement::Call(hir::LValue::Var(out.clone()),
@@ -453,6 +452,8 @@ impl Emitter {
                         val_end
                     ));
 
+                stmts.push(boolean_update_stmt.clone());
+
                 self.current_local_vars.insert(c.name.clone());
 
                 let mut body_block = hir::Block::new(vec!());
@@ -486,6 +487,8 @@ impl Emitter {
                 let tmp = self.mk_intermediate_var();
                 if f_name == "println" {
                     stmts.extend(self.unpack_println_call(&tmp, &vals)?);
+                } else if f_name == "print" {
+                    stmts.extend(self.unpack_variadic_call(&tmp, &f_name, false, &vals)?);
                 } else {
                     stmts.push(hir::Statement::Call(
                         hir::LValue::Var(tmp),
@@ -521,6 +524,7 @@ impl Emitter {
         // this local variable.
         // thus, we have to look for the current scope of var_name.
         // we shall rename the global variables rather than the local ones.
+        // EXCEPT if we are in the entrypoint.
         if !self.current_params.contains(var_name) {
             self.current_local_vars.insert(var_name.clone());
         }
@@ -544,7 +548,7 @@ impl Emitter {
 
         // A structure must be allocated before to be used, right?
         if let hir::Val::Var(ref struct_val_name) = struct_val {
-            if !self.current_params.contains(struct_val_name) && !self.current_local_vars.contains(struct_val_name) && !self.old_global_vars.contains_key(struct_val_name) {
+            if !self.current_params.contains(struct_val_name) && !self.current_local_vars.contains(struct_val_name) && !self.global_vars.contains(struct_val_name) {
                 return Err(format!("[T-AST] Unbound structure variable, '{}' is not bound (params: {:?}, locals: {:?}, globals: {:?})!",
                 struct_val_name.clone(), self.current_params, self.current_local_vars, self.global_vars).into());
             }
@@ -815,15 +819,20 @@ impl Emitter {
         raw_global_vars.push("nothing".to_string()); // Implicit variable of type Nothing.
 
         for gvar in raw_global_vars {
-            let gvar_new_name = self.emit_unique_gvar_name(&gvar);
-            self.global_vars.insert(gvar_new_name.clone());
-            self.old_global_vars.insert(gvar, gvar_new_name);
+            self.global_vars.insert(gvar.clone());
         }
+
+        self.in_entrypoint = true;
 
         // 3. build the body by concatenating the statements of all expression in order.
         let body: hir::Block = hir::Block::new(self.emit_flattened_statements(&toplevel)?);
 
-        Ok((self.global_vars.iter().cloned().collect(), hir::Function::new(entrypoint_name, vec![], self.current_local_vars.drain().collect(), body)))
+        self.in_entrypoint = false;
+
+        // local vars are exactly: current local vars - globals
+        let actual_local_vars = self.current_local_vars.drain().collect::<HashSet<String>>().difference(&self.global_vars).cloned().collect();
+
+        Ok((self.global_vars.iter().cloned().collect(), hir::Function::new(entrypoint_name, vec![], actual_local_vars, body)))
     }
 }
 
