@@ -605,7 +605,7 @@ pub fn hir_to_lir(hir: &hir::Source) -> Result<lir::Source, Error> {
             lir::Statement::Inst(lir::Instruction::Call(
                     Some(("ret_code_ty".to_string(), "ret_code_val".to_string())),
                     false,
-                    global.get_fn_compiled_name("main")?,
+                    global.get_fn_compiled_name(&hir.entrypoint)?,
                     vec!()
             )),
             lir::Statement::Inst(lir::Instruction::Return(

@@ -156,6 +156,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             string: String,
 
             GLOBALS: (),
+            ENTRY: (),
             FN: (),
             VARS: (),
             CALL: (),
@@ -235,6 +236,7 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
                         Token::Ident(name) => {
                             match name.as_str() {
                                 "globals" => $GLOBALS(()),
+                                "entry" => $ENTRY(()),
                                 "fn" => $FN(()),
                                 "vars" => $VARS(()),
                                 "call" => $CALL(()),
@@ -362,11 +364,11 @@ pub fn parse_hir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
                 Ok(v)
             },
 
-            (source -> globals:globals) => {
-                Ok(Source::new($globals, vec!()))
+            (source -> globals:globals ENTRY COLON entry:ident SEMICOLON) => {
+                Ok(Source::new($globals, $entry, vec!()))
             },
-            (source -> globals:globals v:decls_list) => {
-                Ok(Source::new($globals, $v))
+            (source -> globals:globals ENTRY COLON entry:ident SEMICOLON v:decls_list) => {
+                Ok(Source::new($globals, $entry, $v))
             },
 
             (decl -> s:structure) => {

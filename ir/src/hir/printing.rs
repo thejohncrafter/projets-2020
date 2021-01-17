@@ -221,6 +221,8 @@ impl std::fmt::Display for Source {
                 }).collect::<String>()
         )?;
 
+        writeln!(f, "entry: {};", self.entrypoint)?;
+
         self.decls.iter().try_for_each(|d| writeln!(f, "{}", d))?;
 
         Ok(())

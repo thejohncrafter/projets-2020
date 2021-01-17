@@ -1,5 +1,6 @@
 
 globals: test_var;
+entry: main;
 
 struct structure {a}
 

@@ -142,12 +142,13 @@ pub enum Decl {
 
 pub struct Source {
     pub globals: Vec<String>,
+    pub entrypoint: String,
     pub decls: Vec<Decl>,
 }
 
 impl Source {
-    pub fn new(globals: Vec<String>, decls: Vec<Decl>) -> Self {
-        Source {globals, decls}
+    pub fn new(globals: Vec<String>, entrypoint: String, decls: Vec<Decl>) -> Self {
+        Source {globals, entrypoint, decls}
     }
 }
 
