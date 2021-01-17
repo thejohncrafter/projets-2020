@@ -21,7 +21,7 @@ impl GlobalRegistry {
     fn get_var_access(&self, name: &str) -> Result<String, Error> {
         match self.var_ids.get(name) {
             Some(i) => Ok(format!("(global_var_{})", i)),
-            None => Err(format!("Variable {} was not declared", name).into())
+            None => Err(format!("[LIR] Variable {} was not declared", name).into())
         }
     }
 
@@ -247,7 +247,7 @@ fn inst_to_asm(
             if let Some(label_id) = label_ids.get(&label.name) {
                 writeln!(asm, "\tjnz fn_{}_lbl_{}", fn_id, label_id)?;
             } else {
-                Err(format!("No label named \"{}\"", label.name))?
+                Err(format!("[LIR] No label named \"{}\"", label.name))?
             }
         },
         Instruction::JumpifNot(a, label) => {
@@ -258,7 +258,7 @@ fn inst_to_asm(
             if let Some(label_id) = label_ids.get(&label.name) {
                 writeln!(asm, "\tjz fn_{}_lbl_{}", fn_id, label_id)?;
             } else {
-                Err(format!("No label named \"{}\"", label.name))?
+                Err(format!("[LIR] No label named \"{}\"", label.name))?
             }
         },
         Instruction::Call(dest, native, fn_name, args) => {
@@ -342,7 +342,7 @@ fn inst_to_asm(
                 if let Some(id) = fn_ids.get(fn_name) {
                     writeln!(asm, "\tcall fn_{}", id)?
                 } else {
-                    Err(format!("No function named \"{}\".", fn_name))?
+                    Err(format!("[LIR] No function named \"{}\".", fn_name))?
                 }
             }
 
@@ -448,7 +448,7 @@ pub fn lir_to_asm(source: &Source) -> Result<String, Error> {
 
     source.functions.iter().enumerate().try_for_each(|(i, f)| {
             if fn_ids.contains_key(&f.name) {
-                Err(format!("Function \"{}\" is not uniquely defined.", f.name))
+                Err(format!("[LIR] Function \"{}\" is not uniquely defined.", f.name))
             } else {
                 fn_ids.insert(f.name.clone(), i);
                 Ok(())
@@ -457,7 +457,7 @@ pub fn lir_to_asm(source: &Source) -> Result<String, Error> {
 
     let main_id = match fn_ids.get("main") {
         Some(id) => id,
-        None => Err("No \"main\" function !".to_string())?
+        None => Err("[LIR] No \"main\" function !".to_string())?
     };
 
     writeln!(asm, "\t.text")?;

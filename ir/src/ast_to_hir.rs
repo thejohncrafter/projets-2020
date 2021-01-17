@@ -159,7 +159,7 @@ impl Emitter {
                         } else {
                             match self.old_global_vars.get(&lv.name) {
                                 None => Err(
-                                    format!("Unexpected error, lvalue of type '{}' is scoped globally but no global variables of name '{}' exist!", e.static_ty,
+                                    format!("[T-AST] Unexpected error, lvalue of type '{}' is scoped globally but no global variables of name '{}' exist!", e.static_ty,
                                         lv.name).into()),
                                 Some(renamed) => Ok((vec![], hir::Val::Var(renamed.clone())))
                             }
@@ -176,7 +176,7 @@ impl Emitter {
 
                                 Ok((stmts, hir::Val::Var(access_out)))
                             },
-                            _ => Err(format!("Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
+                            _ => Err(format!("[T-AST] Unexpected error, lvalue of type '{}' has no field '{}'!", p_exp.static_ty, lv.name).into())
                         }
                     }
                 }
@@ -425,12 +425,12 @@ impl Emitter {
         // A structure must be allocated before to be used, right?
         if let hir::Val::Var(ref struct_val_name) = struct_val {
             if !self.current_params.contains(struct_val_name) && !self.current_local_vars.contains(struct_val_name) && !self.old_global_vars.contains_key(struct_val_name) {
-                return Err(format!("Unbound structure variable, '{}' is not bound (params: {:?}, locals: {:?}, globals: {:?})!",
+                return Err(format!("[T-AST] Unbound structure variable, '{}' is not bound (params: {:?}, locals: {:?}, globals: {:?})!",
                 struct_val_name.clone(), self.current_params, self.current_local_vars, self.global_vars).into());
             }
         } else {
             return Err(
-                format!("Invalid assignment location, left hand is not a variable but a '{:?}'", struct_val).into());
+                format!("[T-AST] Invalid assignment location, left hand is not a variable but a '{:?}'", struct_val).into());
         }
 
         match &structure_exp.static_ty {
@@ -444,7 +444,7 @@ impl Emitter {
 
                 Ok(stmts)
             },
-            _ => Err(format!("Invalid assignment location, left hand is not a structure but a '{}'!", structure_exp.static_ty).into())
+            _ => Err(format!("[T-AST] Invalid assignment location, left hand is not a structure but a '{}'!", structure_exp.static_ty).into())
         }
     }
 

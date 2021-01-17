@@ -79,7 +79,7 @@ impl StructData {
         match self.fields.get(name) {
             Some(data) => Ok(data),
             None => Err(format!(
-                    "Structure \"{}\" has no field named \"{}\"",
+                    "[HIR] Structure \"{}\" has no field named \"{}\"",
                     self.name, name
                 ).into())
         }
@@ -135,7 +135,7 @@ impl GlobalRegistry {
     fn get_var(&self, name: &str) -> Result<&VarData, Error> {
         match self.globals_map.get(name) {
             Some(data) => Ok(data),
-            None => Err(format!("Variable \"{}\" was not declared", name).into()),
+            None => Err(format!("[HIR] Variable \"{}\" was not declared in parent scope", name).into()),
         }
     }
 
@@ -148,7 +148,7 @@ impl GlobalRegistry {
             ConcreteType::Struct(name) => {
                 match self.structs_map.get(name) {
                     Some(data) => Ok(lir::Val::Const(data.id + 4)),
-                    None => Err(format!("Structure \"{}\" was not declared", name).into()),
+                    None => Err(format!("[HIR] Structure \"{}\" was not declared", name).into()),
                 }
             }
         }
@@ -157,14 +157,14 @@ impl GlobalRegistry {
     fn get_struct(&self, name: &str) -> Result<&StructData, Error> {
         match self.structs_map.get(name) {
             Some(data) => Ok(data),
-            None => Err(format!("Structure \"{}\" was not declared", name).into()),
+            None => Err(format!("[HIR] Structure \"{}\" was not declared", name).into()),
         }
     }
 
     fn get_fn_compiled_name(&self, name: &str) -> Result<String, Error> {
         match self.fn_map.get(name) {
             Some(id) => Ok(format!("usr_fn_{}", id)),
-            None => Err(format!("No user function named \"{}\"", name).into())
+            None => Err(format!("[HIR] No user function named \"{}\"", name).into())
         }
     }
 }
@@ -586,7 +586,7 @@ pub fn hir_to_lir(hir: &hir::Source) -> Result<lir::Source, Error> {
         })
     {
         Some(f) => f,
-        None => Err("No \"main\" function".to_string())?
+        None => Err("[HIR] No \"main\" function".to_string())?
     };
 
     hir.decls.iter().try_for_each(|d| -> Result<(), Error> {
