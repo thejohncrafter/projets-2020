@@ -548,7 +548,6 @@ impl Emitter {
             functions.sort_by_key(|(w, _, _)| *w);
 
             // fold over all blocks to build the if cascade in selectivity order.
-            // FIXME(Ryan): the initial value for the fold should be the failure block:
             let mut body = hir::Block::new(stmts).merge(functions.into_iter().fold(hir::Block::new(vec![
                         hir::Statement::Call(hir::LValue::Var(out.clone()),
                             hir::Callable::Call("panic".to_string(), true, vec![
