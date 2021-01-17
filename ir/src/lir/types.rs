@@ -12,7 +12,7 @@ impl Label {
 
 pub enum Val {
     Var(String),
-    Const(u64),
+    Const(i64),
     Str(String),
 }
 
@@ -32,8 +32,8 @@ pub enum Instruction {
     Unary(String, UnaryOp, Val),
 
     Mov(String, Val),
-    AssignArray(Val, u64, Val),
-    Access(String, Val, u64),
+    AssignArray(Val, i64, Val),
+    Access(String, Val, i64),
 
     Jump(Label),
     Jumpif(Val, Label),

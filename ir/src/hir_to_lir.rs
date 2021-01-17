@@ -42,35 +42,35 @@ impl From<&hir::Type> for ConcreteType {
 }
 
 struct FieldData {
-    id: u64,
+    id: i64,
 }
 
 impl FieldData {
-    fn new(id: u64) -> FieldData {
+    fn new(id: i64) -> FieldData {
         FieldData {id}
     }
 
-    fn val_addr(&self) -> u64 {
+    fn val_addr(&self) -> i64 {
         16 * self.id + 8
     }
 
-    fn ty_addr(&self) -> u64 {
+    fn ty_addr(&self) -> i64 {
         16 * self.id
     }
 }
 
 struct StructData {
     name: String,
-    id: u64,
+    id: i64,
     fields: HashMap<String, FieldData>,
 }
 
 impl StructData {
-    fn new(name: String, id: u64, decl: &hir::StructDecl) -> Self {
+    fn new(name: String, id: i64, decl: &hir::StructDecl) -> Self {
         StructData {
             name, id,
             fields: decl.fields.iter().enumerate()
-                .map(|(i, name)| (name.clone(), FieldData::new(i as u64)))
+                .map(|(i, name)| (name.clone(), FieldData::new(i as i64)))
                 .collect()
         }
     }
@@ -118,7 +118,7 @@ impl GlobalRegistry {
                 .map(|(i, v)| (v.clone(), VarData::new(i, true)))
                 .collect(),
             structs_map: vars.iter().enumerate()
-                .map(|(i, d)| (d.name.clone(), StructData::new(d.name.clone(), i as u64, d)))
+                .map(|(i, d)| (d.name.clone(), StructData::new(d.name.clone(), i as i64, d)))
                 .collect(),
             fn_map: fns.iter().enumerate()
                 .map(|(i, name)| (name.to_string(), i))
@@ -364,7 +364,7 @@ fn compile_call(
                     "native_alloc".to_string(),
                     vec!(
                         global.get_ty_id(&ConcreteType::Struct(structure.clone()))?,
-                        lir::Val::Const(global.get_struct(structure)?.get_mem_len() as u64),
+                        lir::Val::Const(global.get_struct(structure)?.get_mem_len() as i64),
                     )
                 )
             ));

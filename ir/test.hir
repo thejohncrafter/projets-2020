@@ -25,6 +25,7 @@ fn print_test_var()
 {
     i <- test_var[structure.a];
     _ <- call native print_int(i);
+    _ <- call native print_string("\n");
 }
 
 fn main()
@@ -32,7 +33,7 @@ fn main()
 {
     test_var <- alloc structure;
 
-    _ <- call native print_string("Hello world !");
+    _ <- call native print_string("Hello world !\n");
     test_var[structure.a] <- call fact((Int64, 5));
     _ <- call print_test_var();
 

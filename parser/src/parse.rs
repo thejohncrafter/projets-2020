@@ -152,6 +152,7 @@ pub fn parse<'a>(file_name: &'a str, contents: &'a str) -> Result<Vec<Decl<'a>>,
         ('"' & (behaved | '\\' & ('\\' | '"' | 'n' | 't'))* & '"') => {
             let mut v = Vec::new();
             let mut chars = $text.chars();
+            chars.next().unwrap();
 
             loop {
                 let c = chars.next().unwrap();

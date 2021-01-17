@@ -1,3 +1,4 @@
+
 use std::collections::HashSet;
 use std::collections::HashMap;
 use std::iter::once;
@@ -246,8 +247,8 @@ impl Emitter {
 
                 Ok((stmts, hir::Val::Var(out)))
             },
-            ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst as u64))),
-            ExpVal::Bool(cst) => Ok((vec![], hir::Val::Const(hir::Type::Bool, u64::from(*cst)))),
+            ExpVal::Int(cst) => Ok((vec![], hir::Val::Const(hir::Type::Int64, *cst))),
+            ExpVal::Bool(cst) => Ok((vec![], hir::Val::Const(hir::Type::Bool, if *cst {1} else {0}))),
             ExpVal::Str(cst) => Ok((vec![], hir::Val::Str(cst.clone()))),
             ExpVal::LValue(lv) => {
                 match lv.in_exp.as_ref() {
@@ -285,7 +286,7 @@ impl Emitter {
                     hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Bin(
                             hir::BinOp::Mul,
-                            hir::Val::Const(hir::Type::Int64, *cst as u64),
+                            hir::Val::Const(hir::Type::Int64, *cst),
                             hir::Val::Var(var.clone())
                         )
                     )
@@ -297,7 +298,7 @@ impl Emitter {
                 stmts.push(
                     hir::Statement::Call(hir::LValue::Var(out.clone()),
                         hir::Callable::Bin(hir::BinOp::Mul,
-                            hir::Val::Const(hir::Type::Int64, *cst as u64),
+                            hir::Val::Const(hir::Type::Int64, *cst),
                             b_val
                         )
                     )

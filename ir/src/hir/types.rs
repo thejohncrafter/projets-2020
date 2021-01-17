@@ -1,3 +1,4 @@
+
 use std::iter::FromIterator;
 
 #[derive(Debug, Clone)]
@@ -13,7 +14,7 @@ pub enum Type {
 pub enum Val {
     Nothing,
     Var(String),
-    Const(Type, u64),
+    Const(Type, i64),
     Str(String),
 }
 

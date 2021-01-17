@@ -41,7 +41,7 @@ enum Punct {
 
 enum Token {
     Ident(String),
-    Num(u64),
+    Num(i64),
     Str(String),
     Punct(Punct),
 }
@@ -50,7 +50,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
     let chars = LineIter::new(contents);
     let input = IndexedString::new(file_name, contents);
 
-    fn parse_u64(text: &str) -> Result<u64, String> {
+    fn parse_i64(text: &str) -> Result<i64, String> {
         text.parse().map_err(|_| "This number does not fit in 64 bits.".to_string())
     }
 
@@ -73,7 +73,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
             Ok(Some(Token::Ident($text.to_string())))
         },
         (num & num*) => {
-            Ok(Some(Token::Num(parse_u64($text)?)))
+            Ok(Some(Token::Num(parse_i64($text)?)))
         },
         ('"' & (behaved | '\\' & ('\\' | '"' | 'n' | 't'))* & '"') => {
             let mut v = Vec::new();
@@ -150,7 +150,7 @@ pub fn parse_lir<'a>(file_name: &'a str, contents: &'a str) -> Result<Source, Re
 
         terms: [
             ident: String,
-            uint: u64,
+            uint: i64,
             string: String,
 
             GLOBALS: (),
