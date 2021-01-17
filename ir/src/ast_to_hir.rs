@@ -292,9 +292,13 @@ impl Emitter {
                 );
 
                 Ok((stmts, hir::Val::Var(out)))
+            },
+            // They produce nothing.
+            ExpVal::Assign(_, _) | ExpVal::For(_, _, _) | ExpVal::While(_, _) => {
+                let stmts = self.emit_statements(e)?;
+
+                Ok((stmts, hir::Val::Nothing))
             }
-            // FIXME(Ryan): verify we covered all cases.
-            _ => Ok((vec![], hir::Val::Var(format!("I_AM_A_PLACEHOLDER_CHECK_ME_PLEASE: {:?}", e).to_string())))
         }
     }
 

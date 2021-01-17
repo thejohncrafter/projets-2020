@@ -7,3 +7,7 @@ pjuliac
 *.pdf
 compiler/*.hir
 compiler/runtime.o
+contrib/compil/
+!contrib/compil/**.jl
+!contrib/compil/**.out
+!contrib/compil/test.sh

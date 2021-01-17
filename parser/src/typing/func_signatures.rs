@@ -19,8 +19,9 @@ pub fn is_this_call_ambiguous(args: Vec<StaticType>, functions: &Vec<FuncSignatu
         .collect();
     let optimal_call_weight = weights.iter().max().unwrap();
 
-    println!("[DEBUG] Ambiguous detection, here's the weights: {:?}, optimal call weight: {}", weights, optimal_call_weight);
-    println!("[DEBUG] Ambiguous detection, here's the args: {:?}, here's the functions: {:?}", args, functions);
+    //FIXME: clean me.
+    //println!("[DEBUG] Ambiguous detection, here's the weights: {:?}, optimal call weight: {}", weights, optimal_call_weight);
+    //println!("[DEBUG] Ambiguous detection, here's the args: {:?}, here's the functions: {:?}", args, functions);
 
     optimal_call_weight > &0 && weights.iter().filter(|w| w == &optimal_call_weight).count() > 1
 }
